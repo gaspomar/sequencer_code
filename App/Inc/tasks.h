@@ -33,6 +33,12 @@ typedef struct
 
 typedef enum
 {
+	BTN_PUSHED,
+	BTN_RELEASED
+} BtnEvent_e;
+
+typedef enum
+{
 	RES_1_3 = 3,
 	RES_1_6 = 6,
 	RES_1_4 = 4,

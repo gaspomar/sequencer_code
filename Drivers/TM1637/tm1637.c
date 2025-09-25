@@ -406,7 +406,7 @@ void tm1637_SetWord(char* word, uint8_t size)
 }
 
 
-void tm1637_SetWordAndNum(char* word, uint8_t size_word, uint8 num)
+void tm1637_SetWordAndNum(char* word, uint8_t size_word, uint8_t num)
 {
     // TODO: error handling
     if(((size_word > 3) && (num > 9)) || ((size_word > 2) && (num > 99)) || ((size_word > 1) && (num > 999)) || ((size_word > 0) && (num > 9999)))
@@ -422,6 +422,7 @@ void tm1637_SetWordAndNum(char* word, uint8_t size_word, uint8 num)
     data[0] = (size_word >= 1) ? tm1637_ConvertCharToData(word[0]) : 0;
     data[1] = (size_word >= 2) ? tm1637_ConvertCharToData(word[1]) : 0;
     data[2] = (size_word >= 3) ? tm1637_ConvertCharToData(word[2]) : 0;
+    data[3] = 0;
 
     data[0] = (num >= 9)    ? tm1637_ConvertCharToData(numBuf[0]) : data[0];
     data[1] = (num >= 99)   ? tm1637_ConvertCharToData(numBuf[1]) : data[1];
