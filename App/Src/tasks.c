@@ -187,6 +187,7 @@ static void Step(SeqData_t* seq);
 static void SendNoteONs(SeqData_t* seq);
 static void SendNoteOFFs(SeqData_t* seq);
 static void ResetSequencer(SeqData_t* seq);
+static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event);
 
 /************************************************************************************************************************
  * Tasks
@@ -379,6 +380,10 @@ void LedUpdateTask(void *)
 					seqLEDs[seqSel->id] = true;
 				}
 			}
+			if(modeCurr == MODE_SET_CHANNEL)
+			{
+				seqLEDsBlink[seqSel->id] = true;
+			}
 
 			// PAGE LEDS --------------------------------------------
 			memset(miscLEDs, 0, 6*sizeof(bool));
@@ -531,13 +536,14 @@ void DispUpdateTask(void *)
 					midiCh = seqSel->midiChannel;
 					xSemaphoreGive(rsrcMutex);
 				}
-				tm1637_SetWordAndNum("CH", 2, midiCh);
+				tm1637_SetNumber(midiCh);
+				//tm1637_SetWordAndNum("ch", 2, midiCh);
 				break;
 			}
 			default:{}
 		}
+		vTaskDelay(pdMS_TO_TICKS(10));
 	}
-	vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 
@@ -570,14 +576,6 @@ void ButtonReadTask(void *)
 
 	while(1)
 	{
-		HAL_GPIO_WritePin(DBG_GPIO_Port, DBG_Pin, GPIO_PIN_SET);
-
-		//for(int i=0; i<32; i++)
-		//{
-		//	if(btnDelay[i] != 0)
-		//	btnDelay[i]--;
-		//}
-
 		// sample current state
 		if(pdTRUE == xSemaphoreTake(rsrcMutex, portMAX_DELAY))
 		{
@@ -589,238 +587,39 @@ void ButtonReadTask(void *)
 				{
 					iBtn = i*8 + j;	// button index
 
-					//if(0 != btnDelay[iBtn]) 
-					//	continue;
-
 					if(GPIO_PIN_SET == HAL_GPIO_ReadPin(btnDetect[j].port, btnDetect[j].pin))
 					{
 						if(false == btnPressed[iBtn])
 						{
-							switch(modeCurr)
+							if(btnPressed[BTN_SHIFT])
 							{
-								case MODE_DEFAULT:
-								{
-									if(false == btnPressed[BTN_SHIFT])
-									{
-										// -- STEPS ------------------
-										if(iBtn < 16)
-										{
-											seqSel->pageSel->steps[iBtn].on = !seqSel->pageSel->steps[iBtn].on;
-										}
-				
-										// -- SEQ SELECT -------------
-										if(iBtn == BTN_SEQ1)
-										{
-											seqSel->gateInSync = false;
-											seqSel = &seq[0];
-										}
-										if(iBtn == BTN_SEQ2)
-										{
-											seqSel->gateInSync = false;
-											seqSel = &seq[1];
-										}
-										if(iBtn == BTN_SEQ3)
-										{
-											seqSel->gateInSync = false;
-											seqSel = &seq[2];
-										}
-										if(iBtn == BTN_DRUM)
-										{
-											seqSel->gateInSync = false;
-											seqSel = &seq[3];
-										}
-
-										// -- PAGES ----------------
-										if(iBtn == BTN_PAGE1)
-										{
-											seqSel->pageSel = &seqSel->patternCurr->pages[0];
-											
-										}
-										if(iBtn == BTN_PAGE2)
-										{
-											seqSel->pageSel = &seqSel->patternCurr->pages[1];
-										}
-										if(iBtn == BTN_PAGE3)
-										{
-											seqSel->pageSel = &seqSel->patternCurr->pages[2];
-										}
-										if(iBtn == BTN_PAGE4)
-										{
-											seqSel->pageSel = &seqSel->patternCurr->pages[3];
-										}
-
-										// -- MISC ------------------
-										if(BTN_START_STOP == iBtn)
-										{
-											xTaskNotify(mainTaskHandle, NOTIF_GLOB_START_STOP, eSetBits);
-										}
-										if(BTN_PITCH == iBtn)
-										{
-											modeCurr = MODE_PITCH;
-											modeChanged = true;
-										}
-									}
-									else if(true == btnPressed[BTN_SHIFT])
-									{
-										switch(iBtn)
-										{
-											// -- PAGES ----------------
-											case BTN_PAGE1:
-											seqSel->patternCurr->pages[0].on = !seqSel->patternCurr->pages[0].on;
-											break;
-
-											case BTN_PAGE2:
-											seqSel->patternCurr->pages[1].on = !seqSel->patternCurr->pages[1].on;
-											break;
-											
-											case BTN_PAGE3:
-											seqSel->patternCurr->pages[2].on = !seqSel->patternCurr->pages[2].on;
-											break;
-
-											case BTN_PAGE4:
-											seqSel->patternCurr->pages[3].on = !seqSel->patternCurr->pages[3].on;
-											break;
-
-											// -- SEQ ON-OFF ----------------
-											case BTN_SEQ1:
-											if(false == seq[0].on)	seq[0].startFlag = true;
-											else					seq[0].offFlag = true;
-											break;
-
-											case BTN_SEQ2:
-											if(false == seq[1].on)	seq[1].startFlag = true;
-											else					seq[1].offFlag = true;
-											break;
-
-											case BTN_SEQ3:
-											if(false == seq[2].on)	seq[2].startFlag = true;
-											else					seq[2].offFlag = true;
-											break;
-
-											case BTN_DRUM:
-											if(false == seq[3].on)	seq[3].startFlag = true;
-											else					seq[3].offFlag = true;
-											break;
-
-											// OTHER --------------------------
-											case 15:
-											modeCurr = MODE_SET_CHANNEL;
-											break;
-										}
-									}
-									break;
-								}
-								case MODE_PITCH:
-								{
-									if(iBtn < 16)
-									{
-										iStepSel = iBtn;
-									}
-									if(iBtn == BTN_LEFT)
-									{
-										modeCurr = MODE_DEFAULT;
-										modeChanged = true;
-									}
-									if(iBtn == BTN_DOWN)
-									{
-										seqSel->pageSel->steps[iStepSel].octOffs--;
-									}
-									if(iBtn == BTN_UP)
-									{
-										seqSel->pageSel->steps[iStepSel].octOffs++;
-									}
-									break;
-								}
-								default:{}
+								ButtonActivate(iBtn, true, BTN_PUSHED);
 							}
-							
+							else
+							{
+								ButtonActivate(iBtn, false, BTN_PUSHED);
+							}
 							btnPressed[iBtn] = true;
 							btnDelay[iBtn] = BUTTON_DEBOUNCE_DELAY_MS;
 						}
 					}
-					else
+					else // GPIO_PIN_RESET
 					{
 						if(true == btnPressed[iBtn])
 						{
-							switch(modeCurr)
+							if(btnPressed[BTN_SHIFT])
 							{
-								case MODE_DEFAULT:
-								{
-									// buttons to act upon regardless of shift key
-									if(BTN_SHIFT == iBtn)
-									{
-										
-									}
-									break;
-								}
-								case MODE_PITCH:
-								{
-									if(modeChanged)
-									{
-										modeChanged = false;
-										break;
-									}
-
-									int32 offset = 12 * seqSel->pageSel->steps[iStepSel].octOffs;
-									// ---------------------------
-									if(iBtn == BTN_1)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote;
-									}
-									if(iBtn == BTN_2b)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 1 + offset;
-									}
-									if(iBtn == BTN_2)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 2 + offset;
-									}
-									if(iBtn == BTN_3b)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 3 + offset;
-									}
-									if(iBtn == BTN_3)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 4 + offset;
-									}
-									if(iBtn == BTN_4)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 5 + offset;
-									}
-									if(iBtn == BTN_5b)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 6 + offset;
-									}
-									if(iBtn == BTN_5)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 7 + offset;
-									}
-									if(iBtn == BTN_6b)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 8 + offset;
-									}
-									if(iBtn == BTN_6)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 9 + offset;
-									}
-									if(iBtn == BTN_7b)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 10 + offset;
-									}
-									if(iBtn == BTN_7)
-									{
-										seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 11 + offset;
-									}
-
-									break;
-								}
+								ButtonActivate(iBtn, true, BTN_RELEASED);
 							}
-							btnPressed[iBtn] = false;
-							btnDelay[iBtn] = BUTTON_DEBOUNCE_DELAY_MS;
+							else
+							{
+								ButtonActivate(iBtn, false, BTN_RELEASED);
+							}
 						}
+						btnPressed[iBtn] = false;
+						btnDelay[iBtn] = BUTTON_DEBOUNCE_DELAY_MS;
 					}
 					btnPressed[iBtn] = (bool)(HAL_GPIO_ReadPin(btnDetect[j].port, btnDetect[j].pin));
-
 				}
 				HAL_GPIO_WritePin(btnSelect[i].port, btnSelect[i].pin, GPIO_PIN_RESET);
 			}
@@ -1097,4 +896,478 @@ static void ResetSequencer(SeqData_t* seq)
 		}
 	}
 	seq->iStepCurr = -1;
+}
+
+
+static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
+{
+	int32 offset = 12 * seqSel->pageSel->steps[iStepSel].octOffs;
+
+	if(!shift)
+	{
+		if(iBtn < 16) // ------------------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel->steps[iBtn].on = !seqSel->pageSel->steps[iBtn].on;
+				}
+				break;
+
+				case MODE_PITCH:
+				if(event == BTN_PUSHED)
+				{
+					iStepSel = iBtn;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SEQ1) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				case MODE_SET_CHANNEL:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->gateInSync = false;
+					seqSel = &seq[0];
+				}
+				break;
+
+				case MODE_PITCH:
+				if(event == BTN_PUSHED)
+				{
+					modeCurr = MODE_DEFAULT;
+					modeChanged = true;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SEQ2) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				case MODE_SET_CHANNEL:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->gateInSync = false;
+					seqSel = &seq[1];
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SEQ3) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				case MODE_SET_CHANNEL:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->gateInSync = false;
+					seqSel = &seq[2];
+				}
+				break;
+
+				case MODE_PITCH:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel->steps[iStepSel].octOffs++;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_DRUM) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				case MODE_SET_CHANNEL:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->gateInSync = false;
+					seqSel = &seq[3];
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel->steps[iStepSel].octOffs--;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_PAGE1) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel = &seqSel->patternCurr->pages[0];
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 6 + offset;
+				}
+				break;
+			}
+			
+		}
+		else if(iBtn == BTN_PAGE2) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel = &seqSel->patternCurr->pages[1];
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 7 + offset;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_PAGE3) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					
+					seqSel->pageSel = &seqSel->patternCurr->pages[2];
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 8 + offset;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_PAGE4) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel = &seqSel->patternCurr->pages[3];
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 9 + offset;
+				}
+				break;
+			}
+		}
+		else if(iBtn == 22) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 10 + offset;
+				}
+				break;
+			}
+		}
+		else if(iBtn == 23) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 11 + offset;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SHIFT) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote;
+				}
+				break;
+			}
+		}
+		else if(iBtn == 27) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 1 + offset;
+				}
+				break;
+			}
+		}
+		else if(iBtn == 28) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel = &seqSel->patternCurr->pages[3];
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 2 + offset;
+				}
+				break;
+			}
+		}
+		else if(iBtn == 29) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->pageSel = &seqSel->patternCurr->pages[3];
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 3 + offset;
+				}
+				break;
+			}
+		}
+		else if(BTN_PITCH == iBtn) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					modeCurr = MODE_PITCH;
+					modeChanged = true;
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 4 + offset;
+				}
+				break;
+			}
+		}
+		else if(BTN_START_STOP == iBtn) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					xTaskNotify(mainTaskHandle, NOTIF_GLOB_START_STOP, eSetBits);
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote + 5 + offset;
+				}
+				break;
+			}
+		}
+	}
+	else if(shift) // ========================================   S H I F T     K E Y S   =====================================================
+	{
+		if(iBtn == 15) // ------------------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					if(modeCurr == MODE_DEFAULT)
+					{
+						modeCurr = MODE_SET_CHANNEL;
+					}
+					if(modeCurr == MODE_SET_CHANNEL)
+					{
+						modeCurr == MODE_DEFAULT;
+					}
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_PAGE1) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->patternCurr->pages[0].on = !seqSel->patternCurr->pages[0].on;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_PAGE2) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->patternCurr->pages[1].on = !seqSel->patternCurr->pages[1].on;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_PAGE3) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->patternCurr->pages[2].on = !seqSel->patternCurr->pages[2].on;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_PAGE4) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					seqSel->patternCurr->pages[3].on = !seqSel->patternCurr->pages[3].on;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SEQ1) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					if(false == seq[0].on)	seq[0].startFlag = true;
+					else					seq[0].offFlag = true;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SEQ2) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					if(false == seq[1].on)	seq[1].startFlag = true;
+					else					seq[1].offFlag = true;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SEQ3) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					if(false == seq[2].on)	seq[2].startFlag = true;
+					else					seq[2].offFlag = true;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_DRUM) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+					if(false == seq[3].on)	seq[3].startFlag = true;
+					else					seq[3].offFlag = true;
+				}
+				break;
+			}
+		}
+		else if(iBtn == BTN_SHIFT) // ------------------------------------------------------------
+		{
+			switch(modeCurr)
+			{
+				case MODE_DEFAULT:
+				if(event == BTN_PUSHED)
+				{
+				}
+				break;
+				
+				case MODE_PITCH:
+				if(event == BTN_RELEASED)
+				{
+					seqSel->pageSel->steps[iStepSel].pitch[0] = seqSel->rootNote;
+				}
+				break;
+			}
+		}
+	}	
 }

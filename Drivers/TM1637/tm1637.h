@@ -8,6 +8,6 @@ void tm1637_SetDefault();
 void tm1637_SetModeAndValue(uint8_t mode, int16_t value, uint8_t showValue);
 void tm1637_SetNumber(int16_t value);
 void tm1637_SetWord(char* word, uint8_t size);
-void tm1637_SetWordAndNum(char* word, uint8_t n_word, uint8 num)
+void tm1637_SetWordAndNum(char* word, uint8_t n_word, uint8_t num);
 
 #endif /*TM1637_h*/
