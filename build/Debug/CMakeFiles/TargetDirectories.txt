@@ -1,0 +1,7 @@
+D:/home/projects/macrokorg/sequencer_project/sequencer_1.1/build/Debug/CMakeFiles/sequencer_1.1.dir
+D:/home/projects/macrokorg/sequencer_project/sequencer_1.1/build/Debug/CMakeFiles/edit_cache.dir
+D:/home/projects/macrokorg/sequencer_project/sequencer_1.1/build/Debug/CMakeFiles/rebuild_cache.dir
+D:/home/projects/macrokorg/sequencer_project/sequencer_1.1/build/Debug/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+D:/home/projects/macrokorg/sequencer_project/sequencer_1.1/build/Debug/cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir
+D:/home/projects/macrokorg/sequencer_project/sequencer_1.1/build/Debug/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+D:/home/projects/macrokorg/sequencer_project/sequencer_1.1/build/Debug/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
