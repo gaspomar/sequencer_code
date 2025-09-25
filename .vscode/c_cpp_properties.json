@@ -1,0 +1,42 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "CMake",
+            "defines": ["false=0", "true=1"],
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "compileCommands": [
+                "${workspaceFolder}/compile_commands.json"
+            ],
+            "cStandard": "c23"
+        },
+        {
+            "name": "STM32",
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "intelliSenseMode": "${default}",
+            "defines": [
+                "USE_HAL_DRIVER",
+                "STM32F103xB",
+                "DEBUG",
+                "false=0",
+                "true=1"
+            ],
+            "cStandard": "c23",
+            "includePath": [
+                "Core/Inc/**",
+                "App/Inc/**",
+                "Middlewares/Third_Party/FreeRTOS/**",
+                "Drivers/CMSIS/Core/Include",
+                "Drivers/CMSIS/Core_A/Include",
+                "Drivers/CMSIS/Device/ST/STM32F1xx/Include",
+                "Drivers/CMSIS/DSP/Include",
+                "Drivers/CMSIS/Include",
+                "Drivers/CMSIS/NN/Include",
+                "Drivers/CMSIS/RTOS/Template",
+                "Drivers/CMSIS/RTOS2/Include",
+                "Drivers/STM32F1xx_HAL_Driver/Inc",
+                "Drivers/STM32F1xx_HAL_Driver/Inc/Legacy"
+            ]
+        }
+    ]
+}
