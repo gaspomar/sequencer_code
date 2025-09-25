@@ -261,6 +261,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         if(counter_100us == syncTimestamps_100us[syncCnt+1])  // counter reached sync event
         {
           counter_100us++;
+
+          HAL_GPIO_TogglePin(DBG_GPIO_Port, DBG_Pin);
+          
+          if(blinkSyncCnt == 23)
+          {
+            blinkSyncCnt = 0;
+          }
+          else
+          {
+            blinkSyncCnt++;
+          }
+
           UART_Buf_AddToQueue(&midiClockMsg, 1);
           if(globPlaying)
           {
@@ -279,7 +291,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
               nextTimestamp = syncTimestamps_100us[syncCnt+1];
             }
           }
-          else
+          else  // not playing
           {
             counter_100us = 0;
           } 

@@ -50,7 +50,8 @@ typedef enum
 {
 	MODE_DEFAULT,
 	MODE_PITCH,
-	MODE_SET_CHANNEL
+	MODE_SET_CHANNEL,
+	MODE_COPY
 } Mode_e;
 
 typedef struct
@@ -103,6 +104,14 @@ typedef struct
 	volatile uint16 stepTimeCnt_ms;
 }__attribute__((packed)) SeqData_t;
 
+typedef struct
+{
+	bool copySelected;
+	Page_t* pageSel;
+	SeqData_t* seqSel;
+	Step_t* stepSel;
+} Menu_t;
+
 // task notification bits ---------------
 
 #define NOTIF_NEW_STEP_REACHED 0x0001
@@ -119,6 +128,7 @@ extern volatile bool bpmIncreased;
 extern volatile SeqData_t seq[4];
 
 extern volatile uint16 blinkCnt_ms;
+extern volatile uint16 blinkSyncCnt;
 extern volatile uint32 syncTimestamps_100us[25];
 extern volatile uint16 syncEventsPerStep_seq1;
 
