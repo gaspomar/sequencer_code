@@ -566,8 +566,6 @@ void LedUpdateTask(void *)
 
 void DispUpdateTask(void *)
 {
-	static char text[4] = {'C', 'H', 0, 0};
-
 	while(1)
 	{
 		switch(modeCurr)
