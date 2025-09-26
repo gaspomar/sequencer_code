@@ -243,7 +243,9 @@ void InitApp()
 		seq[i].startFlag = false;
 		seq[i].offFlag = false;
 		seq[i].gatePercent = 50;
-		seq[i].gateTime_ms = CalculateGateTime(seq[i].stepTime_ms, seq[i].gatePercent);                               
+		seq[i].gateTime_ms = CalculateGateTime(seq[i].stepTime_ms, seq[i].gatePercent);      
+		seq[i].swingPercent = 0;           
+		seq[i].delayedNote = false;              
 		
 		if((i==0) || (i==0))	
 		seq[i].on = true; 
@@ -757,24 +759,24 @@ void MainTask(void *)
 			}
 			
 			// ----------------------- STEPPING -----------------------------
-			if(globPlaying || globStartFlag)
+			if((globPlaying || globStartFlag) && !globStopFlag)
 			{
-				if(((syncCntLocal != syncCntPrev) || globStartFlag) && !globStopFlag)	// sync counter updated or start initiated
+				for(int i=0; i<NUM_SEQUENCERS; i++)
 				{
-					for(int i=0; i<NUM_SEQUENCERS; i++)
+					if(globStartFlag)
 					{
-						if(globStartFlag)
-						{
-							seq[i].stepTimeCnt_ms = 0;
-						}
+						seq[i].stepTimeCnt_ms = 0;
+					}
 
-						if((seq[i].startFlag) && (syncCntLocal == 0))
-						{
-							seq[i].on = true;
-							seq[i].startFlag = false;
-						}
+					if((seq[i].startFlag) && (syncCntLocal == 0))
+					{
+						seq[i].on = true;
+						seq[i].startFlag = false;
+					}
 
-						if(seq[i].on && (syncCntLocal % seq[i].syncEventsPerStep == 0))	// new step reached
+					if(seq[i].on && ((syncCntLocal != syncCntPrev) || seq[i].delayedNote))
+					{
+						if(syncCntLocal % seq[i].syncEventsPerStep == 0)	// new step reached
 						{
 							Step(&seq[i]);
 							
@@ -789,7 +791,6 @@ void MainTask(void *)
 							}
 						}
 					}
-					
 				}
 				
 				for(int i=0; i<NUM_SEQUENCERS; i++)

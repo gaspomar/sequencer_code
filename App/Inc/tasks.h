@@ -96,6 +96,8 @@ typedef struct
 	bool noteOn;
 	int16 notesOn[N_POLYPHONY];
 
+	uint8 swingPercent;
+	bool delayedNote;
 	uint8 gatePercent;
 	bool gateInSync;
 	uint16 syncEventsPerStep;
