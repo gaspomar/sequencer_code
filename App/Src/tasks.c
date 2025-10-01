@@ -143,6 +143,8 @@ static volatile uint16 tempoBpm = 100;
 volatile uint16 blinkCnt_ms = 0;
 volatile uint16 blinkSyncCnt = 0;
 
+volatile uint8 btnDelay_ms[32] = {0};
+
 volatile uint32 syncTimestamps_100us[25];	// stores the timestamps where a midi sync event should happen up to the 1/4 of the beat
 
 // synchronization -------------------------------------------------------
@@ -167,6 +169,7 @@ static volatile uint8 iStepSel = 0;
 #define DISP_UPDATE_TASK_STACK_SIZE 64
 #define POT_UPDATE_TASK_STACK_SIZE 64
 #define BTN_READ_TASK_STACK_SIZE 128
+#define UART_RX_PROCESS_TASK_STACK_SIZE 64
 
 
 void MainTask(void *);
@@ -174,12 +177,14 @@ void LedUpdateTask(void *);
 void DispUpdateTask(void *);
 void PotUpdateTask(void *);
 void ButtonReadTask(void *);
+void UartRxProcessTask(void *);
 
 TaskHandle_t mainTaskHandle;
 TaskHandle_t ledUpdateTaskHandle;
 TaskHandle_t dispUpdateTaskHandle;
 TaskHandle_t potUpdateTaskHandle;
 TaskHandle_t buttonReadTaskHandle;
+TaskHandle_t uartRxProcessTaskHandle;
 
 // local functions -------------------------------------------------------------
 
@@ -200,6 +205,9 @@ void InitApp()
 {
 	seqActive = &seq[0];
 
+	menu.copySelected = false;
+	menu.listenOnNote = false;
+
 	for(int i=0; i<NUM_SEQUENCERS; i++)
 	{
 		for(int l=0; l<NUM_PATTERNS; l++)
@@ -215,6 +223,7 @@ void InitApp()
 				
 				for(int k=0; k<NUM_STEPS; k++)
 				{
+					seq[i].patterns[l].pages[j].steps[k].index = k;
 					seq[i].patterns[l].pages[j].steps[k].on = false;
 					seq[i].patterns[l].pages[j].steps[k].n_poly = 1;
 					seq[i].patterns[l].pages[j].steps[k].pitch[0] = 60;	// middle C
@@ -300,6 +309,9 @@ void InitApp()
 	if(pdPASS != retVal) { /*error*/ }
 
 	retVal = xTaskCreate(ButtonReadTask, "btnReadTask", BTN_READ_TASK_STACK_SIZE, NULL, 2, &buttonReadTaskHandle);
+	if(pdPASS != retVal) { /*error*/ }
+
+	retVal = xTaskCreate(UartRxProcessTask, "uartRxProcTask", UART_RX_PROCESS_TASK_STACK_SIZE, NULL, 2, &uartRxProcessTaskHandle);
 	if(pdPASS != retVal) { /*error*/ }
 
 	CalculateSyncTimestamps(tempoBpm, syncTimestamps_100us);
@@ -399,6 +411,10 @@ void LedUpdateTask(void *)
 					}
 
 					// steps
+					if(menu.listenOnNote)
+					{
+						stepLEDsBlink[menu.stepSel->index] = true;
+					}
 					if(stepBlinkInProg)
 					{
 						stepLEDs[seqActive->iStepCurr] = !seqActive->pageSel->steps[seqActive->iStepCurr].on;
@@ -618,7 +634,6 @@ void PotUpdateTask(void *)
 
 void ButtonReadTask(void *)
 {
-	uint8 btnDelay[32] = {0};
 	uint8 iBtn = 0;
 
 	while(1)
@@ -634,39 +649,41 @@ void ButtonReadTask(void *)
 				{
 					iBtn = i*8 + j;	// button index
 
-					if(GPIO_PIN_SET == HAL_GPIO_ReadPin(btnDetect[j].port, btnDetect[j].pin))
+					if(btnDelay_ms[iBtn] == 0)
 					{
-						if(false == btnPressed[iBtn])
+						if(GPIO_PIN_SET == HAL_GPIO_ReadPin(btnDetect[j].port, btnDetect[j].pin))
 						{
-							if(btnPressed[BTN_SHIFT])
+							if(false == btnPressed[iBtn])
 							{
-								ButtonActivate(iBtn, true, BTN_PUSHED);
-							}
-							else
-							{
-								ButtonActivate(iBtn, false, BTN_PUSHED);
-							}
-							btnPressed[iBtn] = true;
-							btnDelay[iBtn] = BUTTON_DEBOUNCE_DELAY_MS;
-						}
-					}
-					else // GPIO_PIN_RESET
-					{
-						if(true == btnPressed[iBtn])
-						{
-							if(btnPressed[BTN_SHIFT])
-							{
-								ButtonActivate(iBtn, true, BTN_RELEASED);
-							}
-							else
-							{
-								ButtonActivate(iBtn, false, BTN_RELEASED);
+								if(btnPressed[BTN_SHIFT])
+								{
+									ButtonActivate(iBtn, true, BTN_PUSHED);
+								}
+								else
+								{
+									ButtonActivate(iBtn, false, BTN_PUSHED);
+								}
+								btnPressed[iBtn] = true;
+								btnDelay_ms[iBtn] = BUTTON_DEBOUNCE_DELAY_MS;
 							}
 						}
-						btnPressed[iBtn] = false;
-						btnDelay[iBtn] = BUTTON_DEBOUNCE_DELAY_MS;
+						else // GPIO_PIN_RESET
+						{
+							if(true == btnPressed[iBtn])
+							{
+								if(btnPressed[BTN_SHIFT])
+								{
+									ButtonActivate(iBtn, true, BTN_RELEASED);
+								}
+								else
+								{
+									ButtonActivate(iBtn, false, BTN_RELEASED);
+								}
+							}
+							btnPressed[iBtn] = false;
+							btnDelay_ms[iBtn] = BUTTON_DEBOUNCE_DELAY_MS;
+						}
 					}
-					btnPressed[iBtn] = (bool)(HAL_GPIO_ReadPin(btnDetect[j].port, btnDetect[j].pin));
 				}
 				HAL_GPIO_WritePin(btnSelect[i].port, btnSelect[i].pin, GPIO_PIN_RESET);
 			}
@@ -674,6 +691,23 @@ void ButtonReadTask(void *)
 		} 
 
 		vTaskDelay(pdMS_TO_TICKS(2));
+	}
+}
+
+
+void UartRxProcessTask(void *)
+{
+	while(1)
+	{
+		if(pdTRUE == xSemaphoreTake(rsrcMutex, portMAX_DELAY))
+		{
+			for(int i=0; i<UART_RX_BUF_SIZE; i++)
+			{
+				UART_Buf_ProcessRxBuffer();
+			}
+			xSemaphoreGive(rsrcMutex);
+		}
+		vTaskDelay(1);
 	}
 }
 
@@ -754,21 +788,25 @@ void MainTask(void *)
 				}
 			}
 
-			UART_Buf_ProcessRxBuffer();
-
 			if(noteOnReceived)
 			{
+				noteOnReceived = false;
 				switch(modeCurr)
 				{
+					case MODE_DEFAULT:
+					if(menu.listenOnNote)
+					{
+						menu.listenOnNote = false;
+						menu.stepSel->pitch[0] = noteOnMsg[1];
+						menu.stepSel->on = true;
+					}
+					break;
+
 					case MODE_PITCH:
-					noteOnReceived = false;
 					__disable_irq();
 					seqActive->pageSel->steps[iStepSel].pitch[0] = noteOnMsg[1];
 					__enable_irq();
 					break;
-
-					default:
-					noteOnReceived = false;
 				}
 			}
 			
@@ -1025,7 +1063,23 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					seqActive->pageSel->steps[iBtn].on = !seqActive->pageSel->steps[iBtn].on;
+					if(!menu.listenOnNote)
+					{
+						menu.stepSel = &seqActive->pageSel->steps[iBtn];
+						menu.listenOnNote = true;
+					}
+				}
+				else if(event == BTN_RELEASED)
+				{
+					// TODO: check if this could be differently (it shouldn"t)
+					if(menu.stepSel == &seqActive->pageSel->steps[iBtn])
+					{
+						if(menu.listenOnNote)
+						{
+							menu.listenOnNote = false;
+							menu.stepSel->on = !menu.stepSel->on;
+						}
+					}
 				}
 				break;
 
@@ -1151,7 +1205,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 						{
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
-						memcpy(&seqActive->patternCurr->pages[0].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						memcpy(seqActive->patternCurr->pages[0].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
 						menu.pageSel = NULL;
 						menu.copySelected = false;
 						modeCurr = MODE_DEFAULT;
@@ -1193,7 +1247,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 						{
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
-						memcpy(&seqActive->patternCurr->pages[1].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						memcpy(seqActive->patternCurr->pages[1].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
 						menu.pageSel = NULL;
 						menu.copySelected = false;
 						modeCurr = MODE_DEFAULT;
@@ -1210,7 +1264,6 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					seqActive->pageSel = &seqActive->patternCurr->pages[2];
-					menu.copySelected = true;
 				}
 				break;
 				
@@ -1235,7 +1288,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 						{
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
-						memcpy(&seqActive->patternCurr->pages[2].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						memcpy(seqActive->patternCurr->pages[2].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
 						menu.pageSel = NULL;
 						menu.copySelected = false;
 						modeCurr = MODE_DEFAULT;
@@ -1276,7 +1329,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 						{
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
-						memcpy(&seqActive->patternCurr->pages[3].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						memcpy(seqActive->patternCurr->pages[3].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
 						menu.pageSel = NULL;
 						menu.copySelected = false;
 						modeCurr = MODE_DEFAULT;

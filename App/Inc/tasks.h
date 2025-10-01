@@ -56,6 +56,7 @@ typedef enum
 
 typedef struct
 {
+	uint8 index;
 	bool on;
 	uint8 n_poly;
 	int16 pitch[N_POLYPHONY];
@@ -106,7 +107,9 @@ typedef struct
 
 typedef struct
 {
+	bool listenOnNote;
 	bool copySelected;
+
 	Page_t* pageSel;
 	SeqData_t* seqSel;
 	Step_t* stepSel;
@@ -127,6 +130,7 @@ extern volatile bool bpmIncreased;
 
 extern volatile SeqData_t seq[4];
 
+extern volatile uint8 btnDelay_ms[32];
 extern volatile uint16 blinkCnt_ms;
 extern volatile uint16 blinkSyncCnt;
 extern volatile uint32 syncTimestamps_100us[25];

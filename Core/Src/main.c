@@ -220,7 +220,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       seq[1].stepTimeCnt_ms++;
       seq[2].stepTimeCnt_ms++;
       seq[3].stepTimeCnt_ms++;
-      blinkCnt_ms++; 
+      blinkCnt_ms++;
+
+      for(int i=0; i<32; i++)
+      {
+        if(btnDelay_ms[i] > 0)
+        {
+          btnDelay_ms[i]--;
+        }
+      }
     
       if(0 < rotA_cooldownMs)
       {

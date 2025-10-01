@@ -4,7 +4,7 @@
 #include "mein.h"
 
 #define UART_TX_BUF_SIZE 20
-#define UART_RX_BUF_SIZE 100
+#define UART_RX_BUF_SIZE 10
 #define UART_ELEMENT_SIZE 3
 
 typedef struct 
