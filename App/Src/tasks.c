@@ -9,7 +9,6 @@
 #include "misc.h"
 #include "midi.h"
 #include "led.h"
-#include "globals.h"
 #include "tm1637.h"
 #include "tasks.h"
 #include "uart_buffer.h"
@@ -258,7 +257,8 @@ void InitApp()
 	// peripherals
 	HAL_TIM_Base_Start(&htim2);
 	
-	HAL_UART_Receive_IT(&huart1, midiRxBuffer, 3);
+	UART_Buf_Init();
+	UART_Buf_Receive();
 	
 	HAL_ADC_Start_DMA(&hadc1, (uint32*)&potBuffer, 3);
 	
@@ -331,8 +331,6 @@ void LedUpdateTask(void *)
 	// ------------ stepping ---------
 	while(1)
 	{
-		HAL_GPIO_TogglePin(DBG_A6_GPIO_Port, DBG_A6_Pin);
-
 		memset(stepLEDsBlink, 0, 16*sizeof(bool));
 		memset(miscLEDsBlink, 0, 6*sizeof(bool));
 		memset(potLEDsBlink, 0, 3*sizeof(bool));
@@ -555,9 +553,6 @@ void LedUpdateTask(void *)
 
 		xSemaphoreGive(rsrcMutex);
 
-
-		HAL_GPIO_TogglePin(DBG_A6_GPIO_Port, DBG_A6_Pin);
-
 		vTaskDelay(1);
     }
 }
@@ -756,6 +751,24 @@ void MainTask(void *)
 						seqActive = &seq[seqActive->id - 1];
 					}
 					break;
+				}
+			}
+
+			UART_Buf_ProcessRxBuffer();
+
+			if(noteOnReceived)
+			{
+				switch(modeCurr)
+				{
+					case MODE_PITCH:
+					noteOnReceived = false;
+					__disable_irq();
+					seqActive->pageSel->steps[iStepSel].pitch[0] = noteOnMsg[1];
+					__enable_irq();
+					break;
+
+					default:
+					noteOnReceived = false;
 				}
 			}
 			

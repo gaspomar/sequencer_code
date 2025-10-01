@@ -31,7 +31,6 @@
 /* USER CODE BEGIN Includes */
 #include "led.h"
 #include "tasks.h"
-#include "globals.h"
 #include "midi.h"
 #include "uart_buffer.h"
 

@@ -16,12 +16,7 @@ bool pinStateB = true;
 //}
 
 
-// UART update event
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    //UNUSED(huart);
-    //HAL_UART_Receive_IT(&huart1, midiRxBuffer, 3);
-}
+
 
 
 
