@@ -54,6 +54,13 @@ typedef enum
 	MODE_COPY
 } Mode_e;
 
+typedef enum
+{
+	COPY_UNDEFINED,
+	COPY_STEPS,
+	COPY_PAGES
+} CopyTarget_e;
+
 typedef struct
 {
 	uint8 index;
@@ -109,6 +116,9 @@ typedef struct
 {
 	bool listenOnNote;
 	bool copySelected;
+	CopyTarget_e targetType;
+
+	uint8 numSelected;
 
 	Page_t* pageSel;
 	SeqData_t* seqSel;

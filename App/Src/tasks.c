@@ -205,8 +205,7 @@ void InitApp()
 {
 	seqActive = &seq[0];
 
-	menu.copySelected = false;
-	menu.listenOnNote = false;
+	MenuReset();
 
 	for(int i=0; i<NUM_SEQUENCERS; i++)
 	{
@@ -506,7 +505,17 @@ void LedUpdateTask(void *)
 					// page select / misc
 					if(menu.copySelected)
 					{
-						miscLEDsBlink[menu.pageSel->id] = true;
+						if(menu.targetType == COPY_PAGES)
+						{
+							miscLEDsBlink[menu.pageSel->id] = true;
+						}
+						else if(menu.targetType == COPY_STEPS)
+						{
+							for(int i=menu.stepSel->index; i<menu.numSelected; i++)
+							{
+								stepLEDsBlink[i] = true;
+							}
+						}
 					}
 				}
 				break;
@@ -909,6 +918,9 @@ static void MenuReset()
 	menu.seqSel = NULL;
 	menu.stepSel = NULL;
 	menu.copySelected = false;
+	menu.listenOnNote = false;
+	menu.numSelected = 0;
+	menu.targetType = COPY_UNDEFINED;
 }
 
 
@@ -1078,6 +1090,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 						{
 							menu.listenOnNote = false;
 							menu.stepSel->on = !menu.stepSel->on;
+							menu.stepSel = NULL;
 						}
 					}
 				}
@@ -1097,6 +1110,46 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 					seqActive->midiChannel = iBtn;
 				}
 				break;
+
+				case MODE_COPY:
+				if(event == BTN_PUSHED)
+				{
+					if(!menu.copySelected)
+					{
+						// first step selected
+						if((menu.targetType == COPY_UNDEFINED) && (menu.stepSel == NULL))
+						{
+							menu.targetType = COPY_STEPS;
+							menu.stepSel = &seqActive->pageSel->steps[iBtn];
+						}
+						// ending step selected
+						else if(menu.stepSel->index < iBtn)
+						{
+							menu.numSelected = iBtn - menu.stepSel->index + 1;
+							menu.copySelected = true;
+						}
+						else
+						{
+							MenuReset();
+							modeCurr = MODE_DEFAULT;
+						}
+					}
+					else if(menu.targetType == COPY_STEPS)
+					{
+						memcpy(&seqActive->pageSel->steps[iBtn], menu.stepSel, menu.numSelected*sizeof(Step_t));
+						MenuReset();
+						modeCurr = MODE_DEFAULT;
+					}
+				}
+				else if(event == BTN_RELEASED)
+				{
+					if((!menu.copySelected) && (menu.stepSel != NULL))
+					{
+						menu.numSelected = 1;
+						menu.copySelected = true;
+					}
+				}
+				break;
 			}
 		}
 		else if(iBtn == BTN_SEQ1) // ------------------------------------------------------------
@@ -1113,9 +1166,11 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 
 				case MODE_PITCH:
 				case MODE_SET_CHANNEL:
+				case MODE_COPY:
 				if(event == BTN_PUSHED)
 				{
 					modeCurr = MODE_DEFAULT;
+					MenuReset();
 				}
 				break;
 			}
@@ -1206,8 +1261,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
 						memcpy(seqActive->patternCurr->pages[0].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-						menu.pageSel = NULL;
-						menu.copySelected = false;
+						MenuReset();
 						modeCurr = MODE_DEFAULT;
 					}
 				}
@@ -1248,8 +1302,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
 						memcpy(seqActive->patternCurr->pages[1].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-						menu.pageSel = NULL;
-						menu.copySelected = false;
+						MenuReset();
 						modeCurr = MODE_DEFAULT;
 					}
 				}
@@ -1289,8 +1342,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
 						memcpy(seqActive->patternCurr->pages[2].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-						menu.pageSel = NULL;
-						menu.copySelected = false;
+						MenuReset();
 						modeCurr = MODE_DEFAULT;
 					}
 				}
@@ -1330,8 +1382,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 							MIDI_SendAllNotesOff(seqActive->midiChannel);
 						}
 						memcpy(seqActive->patternCurr->pages[3].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-						menu.pageSel = NULL;
-						menu.copySelected = false;
+						MenuReset();
 						modeCurr = MODE_DEFAULT;
 					}
 				}
