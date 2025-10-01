@@ -207,10 +207,9 @@ void InitApp()
 		{
 			seq[i].patterns[l].id = l;
 			seq[i].patterns[l].empty = (i==0) ? false : true;
+			seq[i].patterns[l].numPagesOn = 1;
 			for(int j=0; j<NUM_PAGES; j++)
 			{
-				seq[i].patterns[l].varPagesOn[j] = false;
-
 				seq[i].patterns[l].pages[j].id = j;
 				if(j==0) 	seq[i].patterns[l].pages[j].on = true;
 				else 		seq[i].patterns[l].pages[j].on = false;
@@ -240,7 +239,7 @@ void InitApp()
 		seq[i].midiChannel = i;
 		seq[i].rootNote = NOTE_C3;
 		seq[i].gateInSync = false;
-		seq[i].startFlag = false;
+		seq[i].onFlag = false;
 		seq[i].offFlag = false;
 		seq[i].gatePercent = 50;
 		seq[i].gateTime_ms = CalculateGateTime(seq[i].stepTime_ms, seq[i].gatePercent);                               
@@ -705,15 +704,17 @@ void MainTask(void *)
 			__enable_irq();
 
 			xTaskNotifyWait(0x0000, 0xFFFF, &notVal, 0);
+
+			allSeqOff = !seq[0].on && !seq[1].on && !seq[2].on && !seq[3].on;
 	
-			if(notVal & NOTIF_GLOB_START_STOP)
+			if((notVal & NOTIF_GLOB_START_STOP) || allSeqOff)
 			{
 				if(globPlaying)
 				{
 					globStopFlag = true;
 					DelayFuncUs(150);
 				}
-				else
+				else if(!globPlaying && (notVal & NOTIF_GLOB_START_STOP) && !allSeqOff)
 				{
 					ResetSequencer(&seq[0]);
 					ResetSequencer(&seq[1]);
@@ -770,10 +771,10 @@ void MainTask(void *)
 							seq[i].stepTimeCnt_ms = 0;
 						}
 
-						if((seq[i].startFlag) && (syncCntLocal == 0))
+						if((seq[i].onFlag) && (syncCntLocal == 0))
 						{
 							seq[i].on = true;
-							seq[i].startFlag = false;
+							seq[i].onFlag = false;
 						}
 
 						if(seq[i].on && (syncCntLocal % seq[i].syncEventsPerStep == 0))	// new step reached
@@ -791,7 +792,6 @@ void MainTask(void *)
 							}
 						}
 					}
-					
 				}
 				
 				for(int i=0; i<NUM_SEQUENCERS; i++)
@@ -813,20 +813,36 @@ void MainTask(void *)
 				}
 				
 				allNotesOff = !seq[0].noteOn && !seq[1].noteOn && !seq[2].noteOn && !seq[3].noteOn;
-				allSeqOff = !seq[0].on && !seq[1].on && !seq[2].on && !seq[3].on;
 				
 				if(globStartFlag)
 				{
 					globStartFlag = false;
 					globPlaying = true;
 				}
-
-				if((globStopFlag || allSeqOff) && allNotesOff)
+				
+				if(globStopFlag && allNotesOff)
 				{
 					globPlaying = false;
 					globStopFlag = false;
 				}
-			}	
+			}
+			else if(!globPlaying)
+			{
+				for(int i=0; i<NUM_SEQUENCERS; i++)
+				{
+					if(!seq[i].on && seq[i].onFlag)
+					{
+						seq[i].on = true;
+						seq[i].onFlag = false;
+					}
+					if(seq[i].on && seq[i].offFlag)
+					{
+						seq[i].on = false;
+						seq[i].offFlag = false;
+					}
+				}
+			}
+
 			xSemaphoreGive(rsrcMutex);
 		}
 		syncCntPrev = syncCntLocal;
@@ -1104,7 +1120,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 6 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 6;
 				}
 				break;
 
@@ -1146,7 +1162,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 7 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 7;
 				}
 				break;
 
@@ -1188,7 +1204,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 8 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 8;
 				}
 				break;
 
@@ -1229,7 +1245,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 9 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 9;
 				}
 				break;
 
@@ -1269,7 +1285,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 10 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 10;
 				}
 				break;
 			}
@@ -1287,7 +1303,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 11 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 11;
 				}
 				break;
 			}
@@ -1323,7 +1339,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 1 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 1;
 				}
 				break;
 			}
@@ -1341,7 +1357,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 2 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 2;
 				}
 			}
 		}
@@ -1359,7 +1375,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 3 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 3;
 				}
 			}
 		}
@@ -1384,7 +1400,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 					}
 					else
 					{
-						seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 4 + offset;
+						seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 4;
 					}
 				}
 				break;
@@ -1404,7 +1420,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_PITCH:
 				if(event == BTN_RELEASED)
 				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 5 + offset;
+					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 5;
 				}
 				break;
 			}
@@ -1438,7 +1454,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					if(false == seq[0].on)	seq[0].startFlag = true;
+					if(false == seq[0].on)	seq[0].onFlag = true;
 					else					seq[0].offFlag = true;
 				}
 				break;
@@ -1459,7 +1475,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					if(false == seq[1].on)	seq[1].startFlag = true;
+					if(false == seq[1].on)	seq[1].onFlag = true;
 					else					seq[1].offFlag = true;
 				}
 				break;
@@ -1480,7 +1496,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					if(false == seq[2].on)	seq[2].startFlag = true;
+					if(false == seq[2].on)	seq[2].onFlag = true;
 					else					seq[2].offFlag = true;
 				}
 				break;
@@ -1501,7 +1517,7 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					if(false == seq[3].on)	seq[3].startFlag = true;
+					if(false == seq[3].on)	seq[3].onFlag = true;
 					else					seq[3].offFlag = true;
 				}
 				break;
@@ -1522,20 +1538,19 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					seqActive->patternCurr->pages[0].on = !seqActive->patternCurr->pages[0].on;
-				}
-				break;
-			}
-		}
-		
-		else if(iBtn == BTN_PAGE1) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->patternCurr->pages[0].on = !seqActive->patternCurr->pages[0].on;
+					if(seqActive->patternCurr->pages[0].on)
+					{
+						if(seqActive->patternCurr->numPagesOn > 1)
+						{
+							seqActive->patternCurr->pages[0].on = false;
+							seqActive->patternCurr->numPagesOn--;
+						}
+					}
+					else
+					{
+						seqActive->patternCurr->pages[0].on = true;
+						seqActive->patternCurr->numPagesOn++;
+					}
 				}
 				break;
 			}
@@ -1547,7 +1562,19 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					seqActive->patternCurr->pages[1].on = !seqActive->patternCurr->pages[1].on;
+					if(seqActive->patternCurr->pages[1].on)
+					{
+						if(seqActive->patternCurr->numPagesOn > 1)
+						{
+							seqActive->patternCurr->pages[1].on = false;
+							seqActive->patternCurr->numPagesOn--;
+						}
+					}
+					else
+					{
+						seqActive->patternCurr->pages[1].on = true;
+						seqActive->patternCurr->numPagesOn++;
+					}
 				}
 				break;
 			}
@@ -1559,7 +1586,19 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					seqActive->patternCurr->pages[2].on = !seqActive->patternCurr->pages[2].on;
+					if(seqActive->patternCurr->pages[2].on)
+					{
+						if(seqActive->patternCurr->numPagesOn > 1)
+						{
+							seqActive->patternCurr->pages[2].on = false;
+							seqActive->patternCurr->numPagesOn--;
+						}
+					}
+					else
+					{
+						seqActive->patternCurr->pages[2].on = true;
+						seqActive->patternCurr->numPagesOn++;
+					}
 				}
 				break;
 			}
@@ -1571,7 +1610,19 @@ static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					seqActive->patternCurr->pages[3].on = !seqActive->patternCurr->pages[3].on;
+					if(seqActive->patternCurr->pages[3].on)
+					{
+						if(seqActive->patternCurr->numPagesOn > 1)
+						{
+							seqActive->patternCurr->pages[3].on = false;
+							seqActive->patternCurr->numPagesOn--;
+						}
+					}
+					else
+					{
+						seqActive->patternCurr->pages[3].on = true;
+						seqActive->patternCurr->numPagesOn++;
+					}
 				}
 				break;
 			}

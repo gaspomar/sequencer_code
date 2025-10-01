@@ -73,8 +73,8 @@ typedef struct
 {
 	uint8 id;
 	bool empty;
+	uint8 numPagesOn;
 	Page_t pages[NUM_PAGES];
-	bool varPagesOn[NUM_PAGES];	// alternative pages selected
 } Pattern_t;
 
 	
@@ -82,7 +82,7 @@ typedef struct
 {
 	uint8 id;
 	bool on;
-	bool startFlag;			// sequencer about to be started
+	bool onFlag;			// sequencer about to be started
 	bool offFlag;
 	Resolution_e stepRes;	// step resolution
 	uint8 midiChannel;
