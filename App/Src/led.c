@@ -2,15 +2,6 @@
 #include "main.h"
 #include "misc.h"
 
-typedef struct 
-{
-    GPIO_TypeDef* port;
-    uint32 pin;
-} GPIO_t;
-
-
-static uint32 leds = 0xF0000000;
-
 
 void LED_Set(bool steps[16], bool misc[6], bool pots[3], bool seq[4])
 {

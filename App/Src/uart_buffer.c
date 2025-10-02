@@ -1,4 +1,4 @@
-#include "mein.h"
+#include "misc.h"
 #include "main.h"
 #include <string.h>
 #include "usart.h"
@@ -29,7 +29,7 @@ void UART_Buf_Init()
 }
 
 
-void UART_Buf_AddToQueue(uint8* data, uint8 size)
+void UART_Buf_AddToQueue(const uint8* data, uint8 size)
 {
     __disable_irq();
     if((size <= UART_ELEMENT_SIZE) && (num < UART_TX_BUF_SIZE))

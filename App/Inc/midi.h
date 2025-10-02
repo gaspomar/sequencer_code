@@ -1,7 +1,7 @@
 #ifndef MIDI_H
 #define MIDI_H
 
-#include "mein.h"
+#include "misc.h"
 
 extern uint8 midiNoteOnData[3];
 extern uint8 midiNoteOffData[3];

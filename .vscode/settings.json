@@ -34,7 +34,8 @@
         "tasks.h": "c",
         "cmsis_os.h": "c",
         "stdio.h": "c",
-        "uart_buffer.h": "c"
+        "uart_buffer.h": "c",
+        "app.h": "c"
     },
     "C_Cpp.errorSquiggles": "enabled",
     "cortex-debug.variableUseNaturalFormat": true,

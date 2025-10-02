@@ -672,6 +672,5 @@ static void tm1637_SendPacket(uint8_t data)
         tm1637_CLKhigh();
         DelayUs(20);
         tm1637_CLKlow();
-        int asd = 5;
     }
 }

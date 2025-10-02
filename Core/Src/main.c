@@ -33,6 +33,8 @@
 #include "tasks.h"
 #include "midi.h"
 #include "uart_buffer.h"
+#include "app.h"
+#include "buttons.h"
 
 /* USER CODE END Includes */
 
@@ -220,7 +222,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       seq[1].stepTimeCnt_ms++;
       seq[2].stepTimeCnt_ms++;
       seq[3].stepTimeCnt_ms++;
-      blinkCnt_ms++;
+      app.blinkCnt_ms++;
 
       for(int i=0; i<32; i++)
       {
@@ -244,44 +246,44 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if(htim->Instance == TIM3)
     {
       
-      if(globStopFlag)
+      if(app.globStopFlag)
       {
         counter_100us = 0;
         syncCnt = 0;
         lastTimestamp = 0;
-        nextTimestamp = syncTimestamps_100us[1];
+        nextTimestamp = app.syncTimestamps_100us[1];
       }
-      if(globStartFlag)
+      if(app.globStartFlag)
       {
         counter_100us = 0;
         syncCnt = 0;
         lastTimestamp = 0;
-        nextTimestamp = syncTimestamps_100us[1];
+        nextTimestamp = app.syncTimestamps_100us[1];
       }
       else
       {
-        if(bpmIncreased)
+        if(app.bpmIncreased)
         {
-          counter_100us = syncTimestamps_100us[syncCnt] + MIN(((syncTimestamps_100us[syncCnt+1] - syncTimestamps_100us[syncCnt]) - (nextTimestamp - counter_100us)), syncTimestamps_100us[1]);
-          bpmIncreased = false;
+          counter_100us = app.syncTimestamps_100us[syncCnt] + MIN(((app.syncTimestamps_100us[syncCnt+1] - app.syncTimestamps_100us[syncCnt]) - (nextTimestamp - counter_100us)), app.syncTimestamps_100us[1]);
+          app.bpmIncreased = false;
         }
-        if(counter_100us == syncTimestamps_100us[syncCnt+1])  // counter reached sync event
+        if(counter_100us == app.syncTimestamps_100us[syncCnt+1])  // counter reached sync event
         {
           counter_100us++;
 
           HAL_GPIO_TogglePin(DBG_GPIO_Port, DBG_Pin);
           
-          if(blinkSyncCnt == 23)
+          if(app.blinkSyncCnt == 23)
           {
-            blinkSyncCnt = 0;
+            app.blinkSyncCnt = 0;
           }
           else
           {
-            blinkSyncCnt++;
+            app.blinkSyncCnt++;
           }
 
           UART_Buf_AddToQueue(&midiClockMsg, 1);
-          if(globPlaying)
+          if(app.globPlaying)
           {
             // TODO: for some reason the timing is 3% inaccurate, check with scope!
             if(syncCnt == 23) // 1/4 note reached, counter resets
@@ -289,13 +291,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
               syncCnt = 0;
               counter_100us = 0;
               lastTimestamp = 0;
-              nextTimestamp = syncTimestamps_100us[1];
+              nextTimestamp = app.syncTimestamps_100us[1];
             }
             else
             {
               syncCnt++;
-              lastTimestamp = syncTimestamps_100us[syncCnt];
-              nextTimestamp = syncTimestamps_100us[syncCnt+1];
+              lastTimestamp = app.syncTimestamps_100us[syncCnt];
+              nextTimestamp = app.syncTimestamps_100us[syncCnt+1];
             }
           }
           else  // not playing
@@ -303,7 +305,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             counter_100us = 0;
           } 
         }
-        else if(counter_100us > syncTimestamps_100us[syncCnt+1])
+        else if(counter_100us > app.syncTimestamps_100us[syncCnt+1])
         {
           counter_100us = 0;
         }

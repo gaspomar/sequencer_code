@@ -6,170 +6,19 @@
 #include "usart.h"
 #include "adc.h"
 
+#include "app.h"
 #include "misc.h"
 #include "midi.h"
 #include "led.h"
 #include "tm1637.h"
 #include "tasks.h"
 #include "uart_buffer.h"
+#include "menu.h"
+#include "buttons.h"
 
 #include <string.h>
 #include <stdio.h>
-
-
-/************************************************************************************************************************
- * Macros
- ***********************************************************************************************************************/
-
-#define NUM_SEQUENCERS 4
-
-
- /************************************************************************************************************************
- * Types
- ***********************************************************************************************************************/
-
-typedef struct
-{
-    uint16 tempo;
-    uint16 gate;
-	uint16 swing;
-    uint16 dummy1;
-    uint16 dummy2;
-	uint16 dummy3;
-} __attribute__((packed)) AnalogBuffer_t;
-
-
-#define	BTN_SEQ1 16
-#define	BTN_SEQ2 17
-#define	BTN_SEQ3 18
-#define	BTN_DRUM 19
-
-#define BTN_LEFT 16
-#define BTN_RIGHT 17
-#define BTN_UP 18
-#define BTN_DOWN 19
-
-#define BTN_PAGE1 24
-#define BTN_PAGE2 25
-#define BTN_PAGE3 20
-#define BTN_PAGE4 21
-#define BTN_PAGE5 22
-#define BTN_PAGE6 23
-
-#define BTN_SHIFT 26
-#define BTN_PITCH 30
-#define	BTN_START_STOP 31
-
-#define BTN_1 	26
-#define BTN_2b 	27
-#define BTN_2 	28
-#define BTN_3b 	29
-#define BTN_3 	30
-#define BTN_4 	31
-#define BTN_5b 	24
-#define BTN_5 	25
-#define BTN_6b 	20
-#define BTN_6 	21
-#define BTN_7b 	22
-#define BTN_7 	23
-
-#define NOTE_C3		60
-#define NOTE_Db3	61
-#define NOTE_D3		60
-#define NOTE_Eb3	60
-#define NOTE_E3		60
-#define NOTE_F3		60
-#define NOTE_Gb3	60
-#define NOTE_G3		60
-#define NOTE_Ab3	60
-#define NOTE_A3		60
-#define NOTE_Bb3	60
-#define NOTE_B3		60
-
-
-static const GPIO_t btnSelect[4] = {
-	{BTN_S0_GPIO_Port, BTN_S0_Pin},
-	{BTN_S1_GPIO_Port, BTN_S1_Pin},
-	{BTN_S2_GPIO_Port, BTN_S2_Pin},
-	{BTN_S3_GPIO_Port, BTN_S3_Pin}
-};
-
-static const GPIO_t btnDetect[8] = {
-	{BTN_D0_GPIO_Port, BTN_D0_Pin},
-	{BTN_D1_GPIO_Port, BTN_D1_Pin},
-	{BTN_D2_GPIO_Port, BTN_D2_Pin},
-	{BTN_D3_GPIO_Port, BTN_D3_Pin},
-	{BTN_D4_GPIO_Port, BTN_D4_Pin},
-	{BTN_D5_GPIO_Port, BTN_D5_Pin},
-	{BTN_D6_GPIO_Port, BTN_D6_Pin},
-	{BTN_D7_GPIO_Port, BTN_D7_Pin}
-};
-
-/************************************************************************************************************************
- * Variables
- ***********************************************************************************************************************/
-
-// safe resources (no mutex needed) ---------------------------------------
-
-
-
-// buffers ----------------------------------------------------------------
-
-static volatile AnalogBuffer_t potBuffer;
-
-static volatile uint8 gatePercent;
-
-// states ----------------------------------------------------------------
-
-volatile SeqData_t seq[4];
-
-static volatile SeqData_t* seqActive;
-static volatile Mode_e modeCurr = MODE_DEFAULT;
-
-static volatile bool btnPressed[32] = {0};
-
-static volatile Menu_t menu;
-
-// flags ----------------------------------------------------------------
-
-static volatile bool noteOn = false;
-
-volatile bool globPlaying = false;
-
-// timing ----------------------------------------------------------------
-
-static volatile uint16 tempoBpm = 100;
-
-volatile uint16 blinkCnt_ms = 0;
-volatile uint16 blinkSyncCnt = 0;
-
-volatile uint8 btnDelay_ms[32] = {0};
-
-volatile uint32 syncTimestamps_100us[25];	// stores the timestamps where a midi sync event should happen up to the 1/4 of the beat
-
-// synchronization -------------------------------------------------------
-
-SemaphoreHandle_t uartSem;
-
-SemaphoreHandle_t rsrcMutex;
-
-volatile bool globStopFlag = false;
-volatile bool globStartFlag = false;	// all sequencers are about to be started
-volatile bool bpmIncreased = false;
-volatile bool modeChanged = false;
-
-// navigation ------------------------------------------------------------
-
-static volatile uint8 iStepSel = 0;
-
-// task data -------------------------------------------------------------
-
-#define MAIN_TASK_STACK_SIZE 128
-#define LED_UPDATE_TASK_STACK_SIZE 64
-#define DISP_UPDATE_TASK_STACK_SIZE 64
-#define POT_UPDATE_TASK_STACK_SIZE 64
-#define BTN_READ_TASK_STACK_SIZE 128
-#define UART_RX_PROCESS_TASK_STACK_SIZE 64
+#include <math.h>
 
 
 void MainTask(void *);
@@ -179,144 +28,40 @@ void PotUpdateTask(void *);
 void ButtonReadTask(void *);
 void UartRxProcessTask(void *);
 
-TaskHandle_t mainTaskHandle;
-TaskHandle_t ledUpdateTaskHandle;
-TaskHandle_t dispUpdateTaskHandle;
-TaskHandle_t potUpdateTaskHandle;
-TaskHandle_t buttonReadTaskHandle;
-TaskHandle_t uartRxProcessTaskHandle;
 
-// local functions -------------------------------------------------------------
+OSData_t os;
 
-static void MenuReset();
-static void IncrementBPM();
-static void DecrementBPM();
-static void Step(SeqData_t* seq);
-static void SendNoteONs(SeqData_t* seq);
-static void SendNoteOFFs(SeqData_t* seq);
-static void ResetSequencer(SeqData_t* seq);
-static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event);
 
 /************************************************************************************************************************
- * Tasks
+ * Functions
  ***********************************************************************************************************************/
 
-void InitApp()
-{
-	seqActive = &seq[0];
-
-	MenuReset();
-
-	for(int i=0; i<NUM_SEQUENCERS; i++)
-	{
-		for(int l=0; l<NUM_PATTERNS; l++)
-		{
-			seq[i].patterns[l].id = l;
-			seq[i].patterns[l].empty = (i==0) ? false : true;
-			seq[i].patterns[l].numPagesOn = 1;
-			for(int j=0; j<NUM_PAGES; j++)
-			{
-				seq[i].patterns[l].pages[j].id = j;
-				if(j==0) 	seq[i].patterns[l].pages[j].on = true;
-				else 		seq[i].patterns[l].pages[j].on = false;
-				
-				for(int k=0; k<NUM_STEPS; k++)
-				{
-					seq[i].patterns[l].pages[j].steps[k].on = false;
-					seq[i].patterns[l].pages[j].steps[k].n_poly = 1;
-					seq[i].patterns[l].pages[j].steps[k].pitch[0] = 60;	// middle C
-					seq[i].patterns[l].pages[j].steps[k].octOffs = 0;
-				}
-			}
-		}
-		for(int j=0; j<N_POLYPHONY; j++)
-		{
-			seq[i].notesOn[j] = 0;
-		}
-		seq[i].id = i;
-		seq[i].stepRes = RES_1_16;
-		seq[i].syncEventsPerStep = CalculateSyncEventsPerStep(seq[i].stepRes);
-		seq[i].stepTime_ms = CalculateStepTime(tempoBpm, seq[i].syncEventsPerStep);
-		seq[i].patternCurr = &seq[i].patterns[0];
-		seq[i].pageCurr = &seq[i].patternCurr->pages[0];
-		seq[i].pageSel = &seq[i].patternCurr->pages[0];
-		seq[i].iStepCurr = -1;
-		seq[i].noteOn = false;
-		seq[i].midiChannel = i;
-		seq[i].rootNote = NOTE_C3;
-		seq[i].gateInSync = false;
-		seq[i].onFlag = false;
-		seq[i].offFlag = false;
-		seq[i].gatePercent = 50;
-		seq[i].gateTime_ms = CalculateGateTime(seq[i].stepTime_ms, seq[i].gatePercent);                               
-		
-		if((i==0) || (i==0))	
-		seq[i].on = true; 
-		else		
-		seq[i].on = false;
-	}
-
-	MenuReset();
-
-	HAL_GPIO_WritePin(DBG_A6_GPIO_Port, DBG_A6_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(DBG_GPIO_Port, DBG_Pin, GPIO_PIN_RESET);
-
-	// peripherals
-	HAL_TIM_Base_Start(&htim2);
-	
-	UART_Buf_Init();
-	UART_Buf_Receive();
-	
-	HAL_ADC_Start_DMA(&hadc1, (uint32*)&potBuffer, 3);
-	
-	tm1637_SetUsDelayFunction(DelayFuncUs);
-	
-	// welcome animation
-	tm1637_SetDefault();
-	
-	LED_ClearAll();
-	LED_AnimationWelcome();
-	HAL_Delay(700);
-	LED_ClearAll();
-	HAL_Delay(500);
-	
-	tm1637_SetNumber(tempoBpm);
-	
-	// TODO: TM1637 timeout
-	
+ void InitOSData()
+ {
 	// semaphores and events
-	uartSem = xSemaphoreCreateBinary();
-
-	rsrcMutex = xSemaphoreCreateMutex();
-	
-	// TODO: check if above commands were successful
+	os.uartSem = xSemaphoreCreateBinary();
+	os.rsrcMutex = xSemaphoreCreateMutex();
 	
 	// tasks
 	BaseType_t retVal;
 	
-	retVal = xTaskCreate(MainTask, "mainTask", MAIN_TASK_STACK_SIZE, NULL, 3, &mainTaskHandle);
+	retVal = xTaskCreate(MainTask, "mainTask", MAIN_TASK_STACK_SIZE, NULL, 3, &os.mainTaskHandle);
 	if(pdPASS != retVal) { /*error*/ }
 	
-	retVal = xTaskCreate(LedUpdateTask, "ledUpdateTask", LED_UPDATE_TASK_STACK_SIZE, NULL, 1, &ledUpdateTaskHandle);
+	retVal = xTaskCreate(LedUpdateTask, "ledUpdateTask", LED_UPDATE_TASK_STACK_SIZE, NULL, 1, &os.ledUpdateTaskHandle);
 	if(pdPASS != retVal) { /*error*/ }
 
-	retVal = xTaskCreate(DispUpdateTask, "dispUpdateTask", DISP_UPDATE_TASK_STACK_SIZE, NULL, 1, &dispUpdateTaskHandle);
+	retVal = xTaskCreate(DispUpdateTask, "dispUpdateTask", DISP_UPDATE_TASK_STACK_SIZE, NULL, 1, &os.dispUpdateTaskHandle);
 	if(pdPASS != retVal) { /*error*/ }
 	
-	retVal = xTaskCreate(PotUpdateTask, "potUpdateTask", POT_UPDATE_TASK_STACK_SIZE, NULL, 2, &potUpdateTaskHandle);
+	retVal = xTaskCreate(PotUpdateTask, "potUpdateTask", POT_UPDATE_TASK_STACK_SIZE, NULL, 2, &os.potUpdateTaskHandle);
 	if(pdPASS != retVal) { /*error*/ }
 
-	retVal = xTaskCreate(ButtonReadTask, "btnReadTask", BTN_READ_TASK_STACK_SIZE, NULL, 2, &buttonReadTaskHandle);
+	retVal = xTaskCreate(ButtonReadTask, "btnReadTask", BTN_READ_TASK_STACK_SIZE, NULL, 2, &os.buttonReadTaskHandle);
 	if(pdPASS != retVal) { /*error*/ }
 
-	retVal = xTaskCreate(UartRxProcessTask, "uartRxProcTask", UART_RX_PROCESS_TASK_STACK_SIZE, NULL, 2, &uartRxProcessTaskHandle);
-	if(pdPASS != retVal) { /*error*/ }
-
-	CalculateSyncTimestamps(tempoBpm, syncTimestamps_100us);
-	
-	HAL_TIM_Base_Start_IT(&htim1);
-	HAL_TIM_Base_Start_IT(&htim3);
-}
+	retVal = xTaskCreate(UartRxProcessTask, "uartRxProcTask", UART_RX_PROCESS_TASK_STACK_SIZE, NULL, 2, &os.uartRxProcessTaskHandle);
+ }
 
 
 void LedUpdateTask(void *)
@@ -346,11 +91,11 @@ void LedUpdateTask(void *)
 		memset(potLEDsBlink, 0, 3*sizeof(bool));
 		memset(seqLEDsBlink, 0, 4*sizeof(bool));
 		
-		if(pdTRUE == xSemaphoreTake(rsrcMutex, portMAX_DELAY))
+		if(pdTRUE == xSemaphoreTake(os.rsrcMutex, portMAX_DELAY))
 		{
 			__disable_irq();
-			blinkSyncCntLoc = blinkSyncCnt;
-			blinkCntLoc_ms = blinkCnt_ms;
+			blinkSyncCntLoc = app.blinkSyncCnt;
+			blinkCntLoc_ms = app.blinkCnt_ms;
 			__enable_irq();
 
 			
@@ -358,7 +103,7 @@ void LedUpdateTask(void *)
 			
 			if (notVal & NOTIF_NEW_STEP_REACHED)
 			{
-				if(seqActive->pageCurr == seqActive->pageSel)
+				if(app.seqActive->pageCurr == app.seqActive->pageSel)
 				{
 					stepBlinkInProg = true;
 				}
@@ -368,7 +113,7 @@ void LedUpdateTask(void *)
 			if((blinkSyncCntLoc != blinkSyncCntPrev) && (blinkSyncCntLoc % 24 == 0))
 			{
 				__disable_irq();
-				blinkCnt_ms = 0;
+				app.blinkCnt_ms = 0;
 				blinkCntLoc_ms = 0;
 				__enable_irq();
 			}
@@ -377,7 +122,7 @@ void LedUpdateTask(void *)
 			memset(seqLEDs, 0, 4*sizeof(bool));
 			memset(miscLEDs, 0, 6*sizeof(bool));
 
-			switch(modeCurr)
+			switch(app.modeCurr)
 			{
 				case MODE_DEFAULT:// -----------------------------------------------------------
 				{
@@ -391,49 +136,42 @@ void LedUpdateTask(void *)
 					}
 					else
 					{
-						seqLEDs[seqActive->id] = true;
+						seqLEDs[app.seqActive->id] = true;
 					}
 
 					// page select / misc
-					miscLEDsBlink[seqActive->pageCurr->id] = true;
+					miscLEDsBlink[app.seqActive->pageCurr->id] = true;
 					for(int i=0; i<NUM_PAGES; i++)
 					{
 						if(btnPressed[BTN_SHIFT])
 						{
-							miscLEDs[i] = seqActive->patternCurr->pages[i].on;
+							miscLEDs[i] = app.seqActive->patternCurr->pages[i].on;
 						}
 						else
 						{
-							miscLEDs[i] = seqActive->pageSel->id == seqActive->patternCurr->pages[i].id;
+							miscLEDs[i] = app.seqActive->pageSel->id == app.seqActive->patternCurr->pages[i].id;
 						}
 					}
 
-					// steps
-					//if(menu.listenOnNote)
-					//{
-					//	stepLEDsBlink[menu.stepSel->index] = true;
-					//}
 					if(stepBlinkInProg)
 					{
-						stepLEDs[seqActive->iStepCurr] = !seqActive->pageSel->steps[seqActive->iStepCurr].on;
+						stepLEDs[app.seqActive->iStepCurr] = !app.seqActive->pageSel->steps[app.seqActive->iStepCurr].on;
 					}
 					
 					for(int i=0; i<16; i++)
 					{
 						if(!stepBlinkInProg)
 						{
-							stepLEDs[i] = seqActive->pageSel->steps[i].on;
+							stepLEDs[i] = app.seqActive->pageSel->steps[i].on;
 						}
 					}
-					
-
 				}
 				break;
 
 				case MODE_PITCH: // -----------------------------------------------------------
 				{
 					// page select / misc
-					switch(seqActive->pageSel->steps[iStepSel].octOffs)
+					switch(app.seqActive->pageSel->steps[app.iStepSel].octOffs)
 					{
 						case -3:
 						{
@@ -474,16 +212,16 @@ void LedUpdateTask(void *)
 					}
 
 					// steps
-					stepLEDsBlink[iStepSel] = true;
+					stepLEDsBlink[app.iStepSel] = true;
 					if(stepBlinkInProg)
 					{
-						stepLEDs[seqActive->iStepCurr] = !seqActive->pageSel->steps[seqActive->iStepCurr].on;
+						stepLEDs[app.seqActive->iStepCurr] = !app.seqActive->pageSel->steps[app.seqActive->iStepCurr].on;
 					}
 					for(int i=0; i<16; i++)
 					{
 						if(!stepBlinkInProg)
 						{
-							stepLEDs[i] = seqActive->pageSel->steps[i].on;
+							stepLEDs[i] = app.seqActive->pageSel->steps[i].on;
 						}
 					}
 				}
@@ -492,11 +230,11 @@ void LedUpdateTask(void *)
 				case MODE_SET_CHANNEL: // -----------------------------------------------------------
 				{
 					// sequencer select 
-					seqLEDs[seqActive->id] = true;
+					seqLEDs[app.seqActive->id] = true;
 
 					// steps
 					memset(stepLEDs, 0, NUM_STEPS);
-					stepLEDs[seqActive->midiChannel] = true;
+					stepLEDs[app.seqActive->midiChannel] = true;
 				}
 				break;
 
@@ -520,7 +258,7 @@ void LedUpdateTask(void *)
 					// steps
 					for(int i=0; i<16; i++)
 					{
-						stepLEDs[i] = seqActive->pageSel->steps[i].on;
+						stepLEDs[i] = app.seqActive->pageSel->steps[i].on;
 					}
 				}
 				break;
@@ -528,9 +266,9 @@ void LedUpdateTask(void *)
 
 
 			// potentiometer leds
-			if(false == seqActive->gateInSync)
+			if(false == app.seqActive->gateInSync)
 			{
-				if(seqActive->gatePercent > gatePercent)
+				if(app.seqActive->gatePercent > app.gatePercent)
 				{
 					potLEDsBlink[1] = true;
 				}
@@ -542,7 +280,7 @@ void LedUpdateTask(void *)
 
 
 			// ------- gate reached -----------
-			if (seqActive->stepTimeCnt_ms >= 30)
+			if (app.seqActive->stepTimeCnt_ms >= 30)
 			{
 				if(stepBlinkInProg)
 				{
@@ -555,7 +293,7 @@ void LedUpdateTask(void *)
 			{
 				for(int i=0; i<16; i++)
 				{
-					if((seqActive->pageCurr != seqActive->pageSel) || (iStepSel != seqActive->iStepCurr))
+					if((app.seqActive->pageCurr != app.seqActive->pageSel) || (app.iStepSel != app.seqActive->iStepCurr))
 					{
 						stepLEDs[i] = stepLEDs[i] ^ stepLEDsBlink[i];
 					}
@@ -581,7 +319,7 @@ void LedUpdateTask(void *)
 		blinkSyncCntPrev = blinkSyncCntLoc;
 		__enable_irq();
 
-		xSemaphoreGive(rsrcMutex);
+		xSemaphoreGive(os.rsrcMutex);
 
 		vTaskDelay(1);
     }
@@ -590,15 +328,13 @@ void LedUpdateTask(void *)
 
 void DispUpdateTask(void *)
 {
-	static char text[4] = {'C', 'H', 0, 0};
-
 	while(1)
 	{
-		switch(modeCurr)
+		switch(app.modeCurr)
 		{
 			case MODE_DEFAULT:
 			{
-				tm1637_SetNumber(tempoBpm);
+				tm1637_SetNumber(app.tempoBpm);
 				break;
 			}
 			case MODE_PITCH:
@@ -628,17 +364,17 @@ void PotUpdateTask(void *)
 {
 	while(1)
 	{
-		gatePercent = MAX((uint8)SATURATE((((fabs((float)SATURATE(potBuffer.gate, 4040) - 4040.0))/4040.0)*100.0), 99.0), 1);
+		app.gatePercent = MAX((uint8)SATURATE((((fabs((float)SATURATE(app.potBuffer.gate, 4040) - 4040.0))/4040.0)*100.0), 99.0), 1);
 
-		if((seqActive->gatePercent >= gatePercent-5) && (seqActive->gatePercent <= gatePercent+5))
+		if((app.seqActive->gatePercent >= app.gatePercent-5) && (app.seqActive->gatePercent <= app.gatePercent+5))
 		{
-			seqActive->gateInSync = true;
+			app.seqActive->gateInSync = true;
 		}
 
-		if(seqActive->gateInSync)
+		if(app.seqActive->gateInSync)
 		{
-			seqActive->gatePercent = gatePercent;
-			seqActive->gateTime_ms = CalculateGateTime(seqActive->stepTime_ms, seqActive->gatePercent);
+			app.seqActive->gatePercent = app.gatePercent;
+			app.seqActive->gateTime_ms = CalculateGateTime(app.seqActive->stepTime_ms, app.seqActive->gatePercent);
 		}
 
 		vTaskDelay(pdMS_TO_TICKS(10));
@@ -653,7 +389,7 @@ void ButtonReadTask(void *)
 	while(1)
 	{
 		// sample current state
-		if(pdTRUE == xSemaphoreTake(rsrcMutex, portMAX_DELAY))
+		if(pdTRUE == xSemaphoreTake(os.rsrcMutex, portMAX_DELAY))
 		{
 			for(int i=0; i<4; i++)
 			{
@@ -701,7 +437,7 @@ void ButtonReadTask(void *)
 				}
 				HAL_GPIO_WritePin(btnSelect[i].port, btnSelect[i].pin, GPIO_PIN_RESET);
 			}
-			xSemaphoreGive(rsrcMutex);
+			xSemaphoreGive(os.rsrcMutex);
 		} 
 
 		vTaskDelay(pdMS_TO_TICKS(2));
@@ -713,13 +449,13 @@ void UartRxProcessTask(void *)
 {
 	while(1)
 	{
-		if(pdTRUE == xSemaphoreTake(rsrcMutex, portMAX_DELAY))
+		if(pdTRUE == xSemaphoreTake(os.rsrcMutex, portMAX_DELAY))
 		{
 			for(int i=0; i<UART_RX_BUF_SIZE; i++)
 			{
 				UART_Buf_ProcessRxBuffer();
 			}
-			xSemaphoreGive(rsrcMutex);
+			xSemaphoreGive(os.rsrcMutex);
 		}
 		vTaskDelay(1);
 	}
@@ -740,7 +476,7 @@ void MainTask(void *)
 	while(1)
     {	
 		// one mutex for all resources
-		if(pdTRUE == xSemaphoreTake(rsrcMutex, portMAX_DELAY))
+		if(pdTRUE == xSemaphoreTake(os.rsrcMutex, portMAX_DELAY))
 		{
 			__disable_irq();
 			syncCntLocal = syncCnt;
@@ -752,24 +488,24 @@ void MainTask(void *)
 	
 			if((notVal & NOTIF_GLOB_START_STOP) || allSeqOff)
 			{
-				if(globPlaying)
+				if(app.globPlaying)
 				{
-					globStopFlag = true;
+					app.globStopFlag = true;
 					DelayFuncUs(150);
 				}
-				else if(!globPlaying && (notVal & NOTIF_GLOB_START_STOP) && !allSeqOff)
+				else if(!app.globPlaying && (notVal & NOTIF_GLOB_START_STOP) && !allSeqOff)
 				{
 					ResetSequencer(&seq[0]);
 					ResetSequencer(&seq[1]);
 					ResetSequencer(&seq[2]);
 					ResetSequencer(&seq[3]);
-					globStartFlag = true;
+					app.globStartFlag = true;
 					DelayFuncUs(150);	// wait for ISR to enter waiting loop
 				}
 			}
 			if (notVal & NOTIF_ROT_INPUT_RIGHT)
 			{
-				switch(modeCurr)
+				switch(app.modeCurr)
 				{
 					case MODE_DEFAULT:
 					case MODE_PITCH:
@@ -777,16 +513,18 @@ void MainTask(void *)
 					break;
 
 					case MODE_SET_CHANNEL:
-					if(seqActive->id < 3)
+					if(app.seqActive->id < 3)
 					{
-						seqActive = &seq[seqActive->id + 1];
+						app.seqActive = &seq[app.seqActive->id + 1];
 					}
 					break;
+
+					default:{}
 				}
 			}
 			if (notVal & NOTIF_ROT_INPUT_LEFT)
 			{
-				switch(modeCurr)
+				switch(app.modeCurr)
 				{
 					case MODE_DEFAULT:
 					case MODE_PITCH:
@@ -794,18 +532,20 @@ void MainTask(void *)
 					break;
 
 					case MODE_SET_CHANNEL:
-					if(seqActive->id > 0)
+					if(app.seqActive->id > 0)
 					{
-						seqActive = &seq[seqActive->id - 1];
+						app.seqActive = &seq[app.seqActive->id - 1];
 					}
 					break;
+
+					default:{}
 				}
 			}
 
 			if(noteOnReceived)
 			{
 				noteOnReceived = false;
-				switch(modeCurr)
+				switch(app.modeCurr)
 				{
 					case MODE_DEFAULT:
 					if(menu.listenOnNote)
@@ -818,20 +558,22 @@ void MainTask(void *)
 
 					case MODE_PITCH:
 					__disable_irq();
-					seqActive->pageSel->steps[iStepSel].pitch[0] = noteOnMsg[1];
+					app.seqActive->pageSel->steps[app.iStepSel].pitch[0] = noteOnMsg[1];
 					__enable_irq();
 					break;
+
+					default:{}
 				}
 			}
 			
 			// ----------------------- STEPPING -----------------------------
-			if(globPlaying || globStartFlag)
+			if(app.globPlaying || app.globStartFlag)
 			{
-				if(((syncCntLocal != syncCntPrev) || globStartFlag) && !globStopFlag)	// sync counter updated or start initiated
+				if(((syncCntLocal != syncCntPrev) || app.globStartFlag) && !app.globStopFlag)	// sync counter updated or start initiated
 				{
 					for(int i=0; i<NUM_SEQUENCERS; i++)
 					{
-						if(globStartFlag)
+						if(app.globStartFlag)
 						{
 							seq[i].stepTimeCnt_ms = 0;
 						}
@@ -851,9 +593,9 @@ void MainTask(void *)
 								SendNoteONs(&seq[i]);
 								seq[i].noteOn = true;
 							}
-							if(seqActive == &seq[i])
+							if(app.seqActive == &seq[i])
 							{
-								xTaskNotify(ledUpdateTaskHandle, NOTIF_NEW_STEP_REACHED, eSetBits);
+								xTaskNotify(os.ledUpdateTaskHandle, NOTIF_NEW_STEP_REACHED, eSetBits);
 							}
 						}
 					}
@@ -879,19 +621,19 @@ void MainTask(void *)
 				
 				allNotesOff = !seq[0].noteOn && !seq[1].noteOn && !seq[2].noteOn && !seq[3].noteOn;
 				
-				if(globStartFlag)
+				if(app.globStartFlag)
 				{
-					globStartFlag = false;
-					globPlaying = true;
+					app.globStartFlag = false;
+					app.globPlaying = true;
 				}
 				
-				if(globStopFlag && allNotesOff)
+				if(app.globStopFlag && allNotesOff)
 				{
-					globPlaying = false;
-					globStopFlag = false;
+					app.globPlaying = false;
+					app.globStopFlag = false;
 				}
 			}
-			else if(!globPlaying)
+			else if(!app.globPlaying)
 			{
 				for(int i=0; i<NUM_SEQUENCERS; i++)
 				{
@@ -908,882 +650,10 @@ void MainTask(void *)
 				}
 			}
 
-			xSemaphoreGive(rsrcMutex);
+			xSemaphoreGive(os.rsrcMutex);
 		}
 		syncCntPrev = syncCntLocal;
 		
 		vTaskDelay(pdMS_TO_TICKS(1));
 	}
-}
-
-
-static void MenuReset()
-{
-	menu.pageSel = NULL;
-	menu.seqSel = NULL;
-	menu.stepSel = NULL;
-	menu.copySelected = false;
-	menu.listenOnNote = false;
-	menu.numSelected = 0;
-	menu.actionCurr = MENU_IDLE;
-}
-
-
-void IncrementBPM()
-{
-	if(tempoBpm < 300)
-	{
-		tempoBpm++;
-		if(0 == tempoChangeCooldown)
-		{
-			// TODO: make sure timer stays in sync in case of tempo change! BUG ALERT!
-			__disable_irq();
-			CalculateSyncTimestamps(tempoBpm, syncTimestamps_100us);
-			bpmIncreased = true;
-			__enable_irq();
-
-			DelayFuncUs(150);
-
-			for(int i=0; i<NUM_SEQUENCERS; i++)
-			{
-				seq[i].stepTime_ms = CalculateStepTime(tempoBpm, seq[i].syncEventsPerStep);
-				seq[i].gateTime_ms = CalculateGateTime(seq[i].stepTime_ms, seq[i].gatePercent);
-			}
-
-			__disable_irq();
-			tempoChangeCooldown = TEMPO_CHANGE_COOLDOWN_MS;
-			__enable_irq();
-		}
-	}
-}
-
-
-void DecrementBPM()
-{
-	if(tempoBpm > 10)
-	{
-		tempoBpm--;
-		if(0 == tempoChangeCooldown)
-		{
-			// TODO: make sure timer stays in sync in case of tempo change! BUG ALERT!
-			__disable_irq();
-			CalculateSyncTimestamps(tempoBpm, syncTimestamps_100us);
-			__enable_irq();
-	
-			for(int i=0; i<NUM_SEQUENCERS; i++)
-			{
-				seq[i].stepTime_ms = CalculateStepTime(tempoBpm, seq[i].syncEventsPerStep);
-				seq[i].gateTime_ms = CalculateGateTime(seq[i].stepTime_ms, seq[i].gatePercent);
-			}
-	
-			__disable_irq();
-			tempoChangeCooldown = TEMPO_CHANGE_COOLDOWN_MS;
-			__enable_irq();
-		}
-	}
-}
-
-
-static void Step(SeqData_t* seq)
-{
-	seq->stepTimeCnt_ms = 0;
-
-	switch(seq->stepRes)
-	{
-		case RES_1_4:
-		case RES_1_8:
-		case RES_1_16:
-		{
-			// TODO: add capability to handle pages shorter than 16 steps
-			if(seq->iStepCurr == 15)
-			{
-				for(int i=seq->pageCurr->id; i<NUM_PAGES; i)
-				{
-					if(i < NUM_PAGES-1)
-					{
-						i++;
-					}
-					else
-					{
-						i=0;
-					}
-
-					if(seq->patternCurr->pages[i].on)
-					{
-						seq->pageCurr = &seq->patternCurr->pages[i];
-						seq->iStepCurr = 0;
-						break;
-					}
-				}
-			}
-			else
-			{
-				seq->iStepCurr++;
-			}
-			break;
-		}
-		case RES_1_3:
-		case RES_1_6:
-		{
-			break;
-		}
-		default:{}
-	} 
-}
-
-
-static void SendNoteONs(SeqData_t* seq)
-{
-	for(int i=0; i<(seq->pageCurr->steps[seq->iStepCurr].n_poly); i++)
-	{
-		Step_t* thisStep = &seq->pageCurr->steps[seq->iStepCurr];
-		MIDI_SendNoteOn(thisStep->pitch[i] + 12*thisStep->octOffs, seq->midiChannel, 60, 0);
-	}
-}
-
-
-static void SendNoteOFFs(SeqData_t* seq)
-{
-	for(int i=0; i<(seq->pageCurr->steps[seq->iStepCurr].n_poly); i++)
-	{
-		Step_t* thisStep = &seq->pageCurr->steps[seq->iStepCurr];
-		MIDI_SendAllNotesOff(seq->midiChannel);
-	}
-}
-
-
-static void ResetSequencer(SeqData_t* seq)
-{
-	// find first activated page
-	for(int i=0; i<NUM_PAGES; i++)
-	{
-		if(seq->patternCurr->pages[i].on)
-		{
-			seq->pageCurr = &seq->patternCurr->pages[i];
-			break;
-		}
-	}
-	seq->iStepCurr = -1;
-}
-
-
-static void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
-{
-	int32 offset = 12 * seqActive->pageSel->steps[iStepSel].octOffs;
-
-	if(!shift)
-	{
-		if(iBtn < 16) // ------------------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(!menu.listenOnNote)
-					{
-						menu.stepSel = &seqActive->pageSel->steps[iBtn];
-						menu.iStepSel = iBtn;
-						menu.listenOnNote = true;
-					}
-				}
-				else if(event == BTN_RELEASED)
-				{
-					// TODO: check if this could be differently (it shouldn"t)
-					if(menu.stepSel == &seqActive->pageSel->steps[iBtn])
-					{
-						if(menu.listenOnNote)
-						{
-							menu.listenOnNote = false;
-							menu.stepSel->on = !menu.stepSel->on;
-							menu.stepSel = NULL;
-						}
-					}
-				}
-				break;
-
-				case MODE_PITCH:
-				if(event == BTN_PUSHED)
-				{
-					iStepSel = iBtn;
-				}
-				break;
-
-				case MODE_SET_CHANNEL:
-				if(event == BTN_PUSHED)
-				{
-					MIDI_SendAllNotesOff(seqActive->midiChannel);
-					seqActive->midiChannel = iBtn;
-				}
-				break;
-
-				case MODE_COPY:
-				if(event == BTN_PUSHED)
-				{
-					if(!menu.copySelected)
-					{
-						// first step selected
-						if((menu.actionCurr == MENU_IDLE) && (menu.stepSel == NULL))
-						{
-							menu.actionCurr = MENU_COPY_STEPS;
-							menu.stepSel = &seqActive->pageSel->steps[iBtn];
-							menu.iStepSel = iBtn;
-						}
-						// ending step selected
-						else if(menu.iStepSel < iBtn)
-						{
-							menu.numSelected = iBtn - menu.iStepSel + 1;
-							menu.copySelected = true;
-						}
-						else
-						{
-							MenuReset();
-							modeCurr = MODE_DEFAULT;
-						}
-					}
-					else if(menu.actionCurr == MENU_COPY_STEPS)
-					{
-						memcpy(&seqActive->pageSel->steps[iBtn], menu.stepSel, menu.numSelected*sizeof(Step_t));
-						MenuReset();
-						modeCurr = MODE_DEFAULT;
-					}
-				}
-				else if(event == BTN_RELEASED)
-				{
-					if((!menu.copySelected) && (menu.stepSel != NULL))
-					{
-						menu.numSelected = 1;
-						menu.copySelected = true;
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SEQ1) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[0];
-				}
-				break;
-
-				case MODE_PITCH:
-				case MODE_SET_CHANNEL:
-				case MODE_COPY:
-				if(event == BTN_PUSHED)
-				{
-					modeCurr = MODE_DEFAULT;
-					MenuReset();
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SEQ2) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[1];
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SEQ3) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[2];
-				}
-				break;
-
-				case MODE_PITCH:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->pageSel->steps[iStepSel].octOffs++;
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_DRUM) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[3];
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->pageSel->steps[iStepSel].octOffs--;
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_PAGE1) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->pageSel = &seqActive->patternCurr->pages[0];
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 6;
-				}
-				break;
-
-				case MODE_COPY:
-				if(event == BTN_PUSHED)
-				{
-					if(!menu.copySelected)
-					{
-						menu.pageSel = &seqActive->patternCurr->pages[0];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
-					}
-					else
-					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
-						{
-							if(seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(seqActive->midiChannel);
-							}
-							memcpy(seqActive->patternCurr->pages[0].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							modeCurr = MODE_DEFAULT;
-						}
-					}
-				}
-				break;
-			}
-			
-		}
-		else if(iBtn == BTN_PAGE2) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->pageSel = &seqActive->patternCurr->pages[1];
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 7;
-				}
-				break;
-
-				case MODE_COPY:
-				if(event == BTN_PUSHED)
-				{
-					if(!menu.copySelected)
-					{
-						menu.pageSel = &seqActive->patternCurr->pages[1];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
-					}
-					else
-					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
-						{
-							if(seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(seqActive->midiChannel);
-							}
-							memcpy(seqActive->patternCurr->pages[1].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							modeCurr = MODE_DEFAULT;
-						}
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_PAGE3) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->pageSel = &seqActive->patternCurr->pages[2];
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 8;
-				}
-				break;
-
-				case MODE_COPY:
-				if(event == BTN_PUSHED)
-				{
-					if(!menu.copySelected)
-					{
-						menu.pageSel = &seqActive->patternCurr->pages[2];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
-					}
-					else
-					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
-						{
-							if(seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(seqActive->midiChannel);
-							}
-							memcpy(seqActive->patternCurr->pages[2].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							modeCurr = MODE_DEFAULT;
-						}
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_PAGE4) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->pageSel = &seqActive->patternCurr->pages[3];
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 9;
-				}
-				break;
-
-				case MODE_COPY:
-				if(event == BTN_PUSHED)
-				{
-					if(!menu.copySelected)
-					{
-						menu.pageSel = &seqActive->patternCurr->pages[3];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
-					}
-					else
-					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
-						{
-							if(seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(seqActive->midiChannel);
-							}
-							memcpy(seqActive->patternCurr->pages[3].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							modeCurr = MODE_DEFAULT;
-						}
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == 22) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 10;
-				}
-				break;
-			}
-		}
-		else if(iBtn == 23) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 11;
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SHIFT) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote;
-				}
-				break;
-			}
-		}
-		else if(iBtn == 27) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 1;
-				}
-				break;
-			}
-		}
-		else if(iBtn == 28) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-				}
-				break;
-
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 2;
-				}
-			}
-		}
-		else if(iBtn == 29) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					modeCurr = MODE_COPY;
-				}
-				break;
-
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 3;
-				}
-			}
-		}
-		else if(BTN_PITCH == iBtn) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					modeCurr = MODE_PITCH;
-					modeChanged = true;
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					if(modeChanged)
-					{
-						modeChanged = false;
-					}
-					else
-					{
-						seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 4;
-					}
-				}
-				break;
-			}
-		}
-		else if(BTN_START_STOP == iBtn) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					xTaskNotify(mainTaskHandle, NOTIF_GLOB_START_STOP, eSetBits);
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote + 5;
-				}
-				break;
-			}
-		}
-	}
-	else if(shift) // ========================================   S H I F T     K E Y S   =====================================================
-	{
-		if(iBtn == 15) // ------------------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(modeCurr == MODE_DEFAULT)
-					{
-						modeCurr = MODE_SET_CHANNEL;
-					}
-					if(modeCurr == MODE_SET_CHANNEL)
-					{
-						modeCurr == MODE_DEFAULT;
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SEQ1) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(false == seq[0].on)	seq[0].onFlag = true;
-					else					seq[0].offFlag = true;
-				}
-				break;
-
-				case MODE_SET_CHANNEL:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[0];
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SEQ2) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(false == seq[1].on)	seq[1].onFlag = true;
-					else					seq[1].offFlag = true;
-				}
-				break;
-
-				case MODE_SET_CHANNEL:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[1];
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SEQ3) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(false == seq[2].on)	seq[2].onFlag = true;
-					else					seq[2].offFlag = true;
-				}
-				break;
-
-				case MODE_SET_CHANNEL:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[2];
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_DRUM) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(false == seq[3].on)	seq[3].onFlag = true;
-					else					seq[3].offFlag = true;
-				}
-				break;
-
-				case MODE_SET_CHANNEL:
-				if(event == BTN_PUSHED)
-				{
-					seqActive->gateInSync = false;
-					seqActive = &seq[3];
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_PAGE1) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(seqActive->patternCurr->pages[0].on)
-					{
-						if(seqActive->patternCurr->numPagesOn > 1)
-						{
-							seqActive->patternCurr->pages[0].on = false;
-							seqActive->patternCurr->numPagesOn--;
-						}
-					}
-					else
-					{
-						seqActive->patternCurr->pages[0].on = true;
-						seqActive->patternCurr->numPagesOn++;
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_PAGE2) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(seqActive->patternCurr->pages[1].on)
-					{
-						if(seqActive->patternCurr->numPagesOn > 1)
-						{
-							seqActive->patternCurr->pages[1].on = false;
-							seqActive->patternCurr->numPagesOn--;
-						}
-					}
-					else
-					{
-						seqActive->patternCurr->pages[1].on = true;
-						seqActive->patternCurr->numPagesOn++;
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_PAGE3) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(seqActive->patternCurr->pages[2].on)
-					{
-						if(seqActive->patternCurr->numPagesOn > 1)
-						{
-							seqActive->patternCurr->pages[2].on = false;
-							seqActive->patternCurr->numPagesOn--;
-						}
-					}
-					else
-					{
-						seqActive->patternCurr->pages[2].on = true;
-						seqActive->patternCurr->numPagesOn++;
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_PAGE4) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-					if(seqActive->patternCurr->pages[3].on)
-					{
-						if(seqActive->patternCurr->numPagesOn > 1)
-						{
-							seqActive->patternCurr->pages[3].on = false;
-							seqActive->patternCurr->numPagesOn--;
-						}
-					}
-					else
-					{
-						seqActive->patternCurr->pages[3].on = true;
-						seqActive->patternCurr->numPagesOn++;
-					}
-				}
-				break;
-			}
-		}
-		else if(iBtn == BTN_SHIFT) // ------------------------------------------------------------
-		{
-			switch(modeCurr)
-			{
-				case MODE_DEFAULT:
-				if(event == BTN_PUSHED)
-				{
-				}
-				break;
-				
-				case MODE_PITCH:
-				if(event == BTN_RELEASED)
-				{
-					seqActive->pageSel->steps[iStepSel].pitch[0] = seqActive->rootNote;
-				}
-				break;
-			}
-		}
-	}	
 }

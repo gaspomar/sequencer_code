@@ -50,6 +50,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/interrupt.c
     App/Src/midi.c
     App/Src/tasks.c
+    App/Src/menu.c
+    App/Src/app.c
+    App/Src/buttons.c
     App/Src/uart_buffer.c
     Drivers/TM1637/TM1637.c
 )

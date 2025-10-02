@@ -1,7 +1,7 @@
 #ifndef LED_H
 #define LED_H
 
-#include "mein.h"
+#include "misc.h"
 
 void LED_Set(bool steps[16], bool misc[6], bool pots[3], bool seq[4]);
 

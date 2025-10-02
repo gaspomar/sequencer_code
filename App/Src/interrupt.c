@@ -10,17 +10,6 @@
 bool pinStateA = true;
 bool pinStateB = true;
 
-// ------- placed in main.c --------
-//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-//{
-//}
-
-
-
-
-
-
-
 
 // Rotary event
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
@@ -33,7 +22,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
             pinStateB = (bool)HAL_GPIO_ReadPin(ROT_B_GPIO_Port, ROT_B_Pin);
             if((false == pinStateA) && (true == pinStateB))
             {
-                xTaskNotifyFromISR(mainTaskHandle, NOTIF_ROT_INPUT_LEFT, eSetBits, NULL);
+                xTaskNotifyFromISR(os.mainTaskHandle, NOTIF_ROT_INPUT_LEFT, eSetBits, NULL);
             }
             pinStateA = HAL_GPIO_ReadPin(ROT_A_GPIO_Port, ROT_A_Pin);
         }
@@ -46,7 +35,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
             pinStateA = (bool)HAL_GPIO_ReadPin(ROT_A_GPIO_Port, ROT_A_Pin);
             if((true == pinStateA) && (false == pinStateB))
             {
-                xTaskNotifyFromISR(mainTaskHandle, NOTIF_ROT_INPUT_RIGHT, eSetBits, NULL);
+                xTaskNotifyFromISR(os.mainTaskHandle, NOTIF_ROT_INPUT_RIGHT, eSetBits, NULL);
             }
             pinStateB = HAL_GPIO_ReadPin(ROT_B_GPIO_Port, ROT_B_Pin);
         }

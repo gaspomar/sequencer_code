@@ -1,7 +1,7 @@
 #ifndef UART_BUFFER_H
 #define UART_BUFFER_H
 
-#include "mein.h"
+#include "misc.h"
 
 #define UART_TX_BUF_SIZE 20
 #define UART_RX_BUF_SIZE 10
@@ -28,7 +28,7 @@ void UART_Buf_Receive();
 
 void UART_Buf_ProcessRxBuffer();
 
-void UART_Buf_AddToQueue(uint8* data, uint8 size);
+void UART_Buf_AddToQueue(const uint8* data, uint8 size);
 
 UART_Buf_Element_t* UART_Buf_GetNextInLine();
 

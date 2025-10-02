@@ -6,128 +6,27 @@
 #include "cmsis_os.h"
 
 
-/************************************************************************************************************************
- * Settings
- ***********************************************************************************************************************/
+#define MAIN_TASK_STACK_SIZE 128
+#define LED_UPDATE_TASK_STACK_SIZE 64
+#define DISP_UPDATE_TASK_STACK_SIZE 64
+#define POT_UPDATE_TASK_STACK_SIZE 64
+#define BTN_READ_TASK_STACK_SIZE 128
+#define UART_RX_PROCESS_TASK_STACK_SIZE 64
 
-
-#define BUTTON_DEBOUNCE_DELAY_MS 20
-#define TEMPO_CHANGE_COOLDOWN_MS 50
-#define N_POLYPHONY 4
-#define NUM_PAGES 4
-#define NUM_PATTERNS 8
-#define NUM_STEPS 16
-#define BLINK_ON_INTERVAL_MS 100
-#define BLINK_OFF_INTERVAL_MS 500
-
-
-/************************************************************************************************************************
- * ----------
- ***********************************************************************************************************************/
 
 typedef struct 
 {
-    GPIO_TypeDef* port;
-    uint32 pin;
-} GPIO_t;
-
-typedef enum
-{
-	BTN_PUSHED,
-	BTN_RELEASED
-} BtnEvent_e;
-
-typedef enum
-{
-	RES_1_3 = 3,
-	RES_1_6 = 6,
-	RES_1_4 = 4,
-	RES_1_8 = 8,
-	RES_1_16 = 16
-} Resolution_e;
-
-typedef enum
-{
-	MODE_DEFAULT,
-	MODE_PITCH,
-	MODE_SET_CHANNEL,
-	MODE_COPY
-} Mode_e;
-
-typedef enum
-{
-	MENU_IDLE,
-	MENU_COPY_STEPS,
-	MENU_COPY_PAGES
-} MenuAction_e;
-
-typedef struct
-{
-	//uint8 index;
-	bool on;
-	uint8 n_poly;
-	int16 pitch[N_POLYPHONY];
-	int8 octOffs;				// octave offset
-} Step_t;
-
-typedef struct
-{
-	uint8 id;
-	bool on;
-	Step_t steps[NUM_STEPS];
-} Page_t;
-
-typedef struct
-{
-	uint8 id;
-	bool empty;
-	uint8 numPagesOn;
-	Page_t pages[NUM_PAGES];
-} Pattern_t;
-
+	SemaphoreHandle_t uartSem;
+	SemaphoreHandle_t rsrcMutex;
 	
-typedef struct
-{
-	uint8 id;
-	bool on;
-	bool onFlag;			// sequencer about to be started
-	bool offFlag;
-	Resolution_e stepRes;	// step resolution
-	uint8 midiChannel;
-	uint8 rootNote;	//
+	TaskHandle_t mainTaskHandle;
+	TaskHandle_t ledUpdateTaskHandle;
+	TaskHandle_t dispUpdateTaskHandle;
+	TaskHandle_t potUpdateTaskHandle;
+	TaskHandle_t buttonReadTaskHandle;
+	TaskHandle_t uartRxProcessTaskHandle;
+} OSData_t;
 
-	Pattern_t patterns[NUM_PATTERNS];
-	Pattern_t* patternCurr;
-	Page_t* pageCurr;	// page where the current step is located
-    Page_t* pageSel;	// selected page
-	uint8 iStepCurr;	// current step index inside current page
-	bool noteOn;
-	int16 notesOn[N_POLYPHONY];
-
-	uint8 gatePercent;
-	bool gateInSync;
-	uint16 syncEventsPerStep;
-	uint16 stepTime_ms;
-	uint16 gateTime_ms;
-	volatile uint16 stepTimeCnt_ms;
-}__attribute__((packed)) SeqData_t;
-
-typedef struct
-{
-	bool listenOnNote;
-	bool copySelected;
-	MenuAction_e actionCurr;
-
-	uint8 numSelected;
-
-	Page_t* pageSel;
-	SeqData_t* seqSel;
-	Step_t* stepSel;
-
-	uint8 iStepSel;
-} Menu_t;
-
-// task notification bits ---------------
 
 #define NOTIF_NEW_STEP_REACHED 0x0001
 #define NOTIF_ROT_INPUT_RIGHT 0x0002
@@ -135,21 +34,8 @@ typedef struct
 #define NOTIF_GLOB_START_STOP 0x0008
 #define NOTIF_LED_UPDATE_REQUIRED 0x0010
 
-extern volatile bool globPlaying;
-extern volatile bool globStopFlag;
-extern volatile bool globStartFlag;
-extern volatile bool bpmIncreased;
+extern OSData_t os;
 
-extern volatile SeqData_t seq[4];
-
-extern volatile uint8 btnDelay_ms[32];
-extern volatile uint16 blinkCnt_ms;
-extern volatile uint16 blinkSyncCnt;
-extern volatile uint32 syncTimestamps_100us[25];
-extern volatile uint16 syncEventsPerStep_seq1;
-
-extern TaskHandle_t mainTaskHandle;
-
-void InitApp();
+void InitOSData();
 
 #endif /*TASK_H*/
