@@ -11,9 +11,9 @@
  ***********************************************************************************************************************/
 
 
-#define BUTTON_DEBOUNCE_DELAY_MS 10
+#define BUTTON_DEBOUNCE_DELAY_MS 20
 #define TEMPO_CHANGE_COOLDOWN_MS 50
-#define N_POLYPHONY 6
+#define N_POLYPHONY 4
 #define NUM_PAGES 4
 #define NUM_PATTERNS 8
 #define NUM_STEPS 16
