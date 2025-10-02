@@ -56,14 +56,14 @@ typedef enum
 
 typedef enum
 {
-	COPY_UNDEFINED,
-	COPY_STEPS,
-	COPY_PAGES
-} CopyTarget_e;
+	MENU_IDLE,
+	MENU_COPY_STEPS,
+	MENU_COPY_PAGES
+} MenuAction_e;
 
 typedef struct
 {
-	uint8 index;
+	//uint8 index;
 	bool on;
 	uint8 n_poly;
 	int16 pitch[N_POLYPHONY];
@@ -116,13 +116,15 @@ typedef struct
 {
 	bool listenOnNote;
 	bool copySelected;
-	CopyTarget_e targetType;
+	MenuAction_e actionCurr;
 
 	uint8 numSelected;
 
 	Page_t* pageSel;
 	SeqData_t* seqSel;
 	Step_t* stepSel;
+
+	uint8 iStepSel;
 } Menu_t;
 
 // task notification bits ---------------
