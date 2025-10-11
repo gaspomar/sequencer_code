@@ -240,19 +240,16 @@ void LedUpdateTask(void *)
 
 				case MODE_COPY: // --------------------------------------------------------------------
 				{
-					// page select / misc
-					if(menu.copySelected)
+					
+					if(menu.state == MENU_COPY_PAGES)
 					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
+						miscLEDsBlink[menu.pageSel->id] = true;
+					}
+					else if(menu.state == MENU_PASTE_STEPS)
+					{
+						for(int i=menu.iStepSel; i<(menu.iStepSel + menu.numSelected); i++)
 						{
-							miscLEDsBlink[menu.pageSel->id] = true;
-						}
-						else if(menu.actionCurr == MENU_COPY_STEPS)
-						{
-							for(int i=menu.iStepSel; i<(menu.iStepSel + menu.numSelected); i++)
-							{
-								stepLEDsBlink[i] = true;
-							}
+							stepLEDsBlink[i] = true;
 						}
 					}
 					// steps
@@ -499,6 +496,7 @@ void MainTask(void *)
 					ResetSequencer(&seq[1]);
 					ResetSequencer(&seq[2]);
 					ResetSequencer(&seq[3]);
+					
 					app.globStartFlag = true;
 					DelayFuncUs(150);	// wait for ISR to enter waiting loop
 				}
@@ -548,11 +546,14 @@ void MainTask(void *)
 				switch(app.modeCurr)
 				{
 					case MODE_DEFAULT:
-					if(menu.listenOnNote)
+					if(menu.state == MENU_LISTEN_ON_NOTE)
 					{
-						menu.listenOnNote = false;
-						menu.stepSel->pitch[0] = noteOnMsg[1];
-						menu.stepSel->on = true;
+						//if(menu.seqSel->midiChannel == (noteOnMsg[0] & 0x0F))
+						//{
+							menu.stepSel->pitch[0] = noteOnMsg[1];
+							menu.stepSel->on = true;
+							Menu_Reset();
+						//}
 					}
 					break;
 

@@ -45,7 +45,8 @@ typedef enum
 	MODE_DEFAULT,
 	MODE_PITCH,
 	MODE_SET_CHANNEL,
-	MODE_COPY
+	MODE_COPY,
+	MODE_ERASE
 } Mode_e;
 
 
@@ -63,27 +64,27 @@ typedef struct
 typedef struct
 {
 	//uint8 index;
-	bool on;
-	uint8 n_poly;
-	int16 pitch[N_POLYPHONY];
-	int8 octOffs;				// octave offset
+	bool on;							// is the step activated
+	uint8 n_poly;						// number of polyphony [TODO: check if you need this]
+	int16 pitch[N_POLYPHONY];			// pitch
+	int8 octOffs;						// octave offset
 } Step_t;
 
 
 typedef struct
 {
-	uint8 id;
-	bool on;
-	Step_t steps[NUM_STEPS];
+	uint8 id;							// ID (basically the index)
+	bool on;							// is the page activated
+	Step_t steps[NUM_STEPS];			// the steps found on the page
 } Page_t;
 
 
 typedef struct
 {
-	uint8 id;
-	bool empty;
-	uint8 numPagesOn;
-	Page_t pages[NUM_PAGES];
+	uint8 id;							// identifier
+	bool empty;							// is the page empty [note: migh not be used]
+	uint8 numPagesOn;					// number of pages activated
+	Page_t pages[NUM_PAGES];			// pages inside pattern
 } Pattern_t;
 
 
@@ -91,26 +92,27 @@ typedef struct
 {
 	uint8 id;
 	bool on;
-	bool onFlag;			// sequencer about to be started
-	bool offFlag;
-	Resolution_e stepRes;	// step resolution
-	uint8 midiChannel;
-	uint8 rootNote;	//
+	bool onFlag;						// sequencer about to be started
+	bool offFlag;						// sequencer about to be stopped
+	Resolution_e stepRes;				// step resolution
+	uint8 midiChannel;					// selected midi channel
+	uint8 rootNote;						// selected root note of the sequencer [note: can be used for arpeggiator]
 
 	Pattern_t patterns[NUM_PATTERNS];
-	Pattern_t* patternCurr;
-	Page_t* pageCurr;	// page where the current step is located
-    Page_t* pageSel;	// selected page
-	uint8 iStepCurr;	// current step index inside current page
-	bool noteOn;
-	int16 notesOn[N_POLYPHONY];
+	Pattern_t* patternCurr;				// pointer to selected pattern
+	Page_t* pageCurr;					// pointer to page where the currently playing step is located
+	uint8 iStepCurr;					// current step index inside currently played page
+	
+    Page_t* pageSel;					// pointer to the selected page
+	bool noteOn;						// flag to indicate that some notes are on [LEGACY]
+	int16 notesOn[N_POLYPHONY];			// which notes are currently on
 
-	uint8 gatePercent;
-	bool gateInSync;
-	uint16 syncEventsPerStep;
-	uint16 stepTime_ms;
-	uint16 gateTime_ms;
-	volatile uint16 stepTimeCnt_ms;
+	uint8 gatePercent;					// currently stored gate value
+	bool gateInSync;					// gate knob is at the same position as stored value
+	uint16 syncEventsPerStep;			// how many midi ticks it takes to reach next step
+	uint16 stepTime_ms;					// time between two changes
+	uint16 gateTime_ms;					// time between step change and gate events
+	volatile uint16 stepTimeCnt_ms;		// how many miliseconds has passed since last change of steps
 }__attribute__((packed)) SeqData_t;
 
 
@@ -123,7 +125,7 @@ typedef struct
     SeqData_t* seqActive;
     
     bool globStopFlag;
-    bool globStartFlag;	// all sequencers are about to be started
+    bool globStartFlag;					// all sequencers are about to be started
     bool bpmIncreased;
     bool modeChanged;
     

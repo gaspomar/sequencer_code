@@ -253,7 +253,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         lastTimestamp = 0;
         nextTimestamp = app.syncTimestamps_100us[1];
       }
-      if(app.globStartFlag)
+      if(app.glob_start_flag)
       {
         counter_100us = 0;
         syncCnt = 0;

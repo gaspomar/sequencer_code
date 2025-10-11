@@ -5,13 +5,14 @@
 volatile Menu_t menu;
 
 
-void MenuReset()
+void Menu_Reset()
 {
 	menu.pageSel = NULL;
 	menu.seqSel = NULL;
 	menu.stepSel = NULL;
+	menu.iStepSel = -1;
 	menu.copySelected = false;
 	menu.listenOnNote = false;
 	menu.numSelected = 0;
-	menu.actionCurr = MENU_IDLE;
+	menu.state = MENU_IDLE;
 }

@@ -159,7 +159,7 @@ void InitApp()
 	app.seqActive = &seq[0];
 
     app.globStopFlag = false;
-    app.globStartFlag = false;
+    app.glob_start_flag = false;
     app.bpmIncreased = false;
     app.modeChanged = false;
     app.noteOn = false;
@@ -167,7 +167,7 @@ void InitApp()
     app.blinkSyncCnt = 0;
     app.iStepSel = 0;
 
-	MenuReset();
+	Menu_Reset();
 
 	for(int i=0; i<NUM_SEQUENCERS; i++)
 	{
@@ -218,7 +218,7 @@ void InitApp()
 		seq[i].on = false;
 	}
 
-	MenuReset();
+	Menu_Reset();
 
 	HAL_GPIO_WritePin(DBG_A6_GPIO_Port, DBG_A6_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(DBG_GPIO_Port, DBG_Pin, GPIO_PIN_RESET);

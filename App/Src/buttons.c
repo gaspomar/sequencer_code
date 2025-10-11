@@ -8,14 +8,16 @@
 #include <string.h>
 
 
-const GPIO_t btnSelect[4] = {
+const GPIO_t btnSelect[4] = 
+{
 	{BTN_S0_GPIO_Port, BTN_S0_Pin},
 	{BTN_S1_GPIO_Port, BTN_S1_Pin},
 	{BTN_S2_GPIO_Port, BTN_S2_Pin},
 	{BTN_S3_GPIO_Port, BTN_S3_Pin}
 };
 
-const GPIO_t btnDetect[8] = {
+const GPIO_t btnDetect[8] = 
+{
 	{BTN_D0_GPIO_Port, BTN_D0_Pin},
 	{BTN_D1_GPIO_Port, BTN_D1_Pin},
 	{BTN_D2_GPIO_Port, BTN_D2_Pin},
@@ -45,11 +47,12 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
-					if(!menu.listenOnNote)
+					if(menu.state == MENU_IDLE)
 					{
+						menu.state = MENU_LISTEN_ON_NOTE;
+						menu.seqSel = app.seqActive;
 						menu.stepSel = &app.seqActive->pageSel->steps[iBtn];
 						menu.iStepSel = iBtn;
-						menu.listenOnNote = true;
 					}
 				}
 				else if(event == BTN_RELEASED)
@@ -57,11 +60,13 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 					// TODO: check if this could be differently (it shouldn"t)
 					if(menu.stepSel == &app.seqActive->pageSel->steps[iBtn])
 					{
-						if(menu.listenOnNote)
+						// no note received, step should be inverted
+						if(menu.state == MENU_LISTEN_ON_NOTE)
 						{
-							menu.listenOnNote = false;
+							menu.state = MENU_IDLE;
 							menu.stepSel->on = !menu.stepSel->on;
-							menu.stepSel = NULL;
+							Menu_Reset();
+
 						}
 					}
 				}
@@ -85,40 +90,40 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_COPY:
 				if(event == BTN_PUSHED)
 				{
-					if(!menu.copySelected)
+					if(menu.state == MENU_IDLE)
 					{
-						// first step selected
-						if((menu.actionCurr == MENU_IDLE) && (menu.stepSel == NULL))
-						{
-							menu.actionCurr = MENU_COPY_STEPS;
-							menu.stepSel = &app.seqActive->pageSel->steps[iBtn];
-							menu.iStepSel = iBtn;
-						}
-						// ending step selected
-						else if(menu.iStepSel < iBtn)
+						menu.state = MENU_COPY_STEPS;
+						menu.seqSel = app.seqActive;
+						menu.stepSel = &app.seqActive->pageSel->steps[iBtn];
+						menu.iStepSel = iBtn;
+					}
+					// ending step selected
+					else if(menu.state == MENU_COPY_STEPS)
+					{
+						if(menu.iStepSel < iBtn)
 						{
 							menu.numSelected = iBtn - menu.iStepSel + 1;
-							menu.copySelected = true;
+							menu.state = MENU_PASTE_STEPS;
 						}
 						else
 						{
-							MenuReset();
+							Menu_Reset();
 							app.modeCurr = MODE_DEFAULT;
 						}
 					}
-					else if(menu.actionCurr == MENU_COPY_STEPS)
+					else if(menu.state == MENU_PASTE_STEPS)
 					{
 						memcpy(&app.seqActive->pageSel->steps[iBtn], menu.stepSel, menu.numSelected*sizeof(Step_t));
-						MenuReset();
+						Menu_Reset();
 						app.modeCurr = MODE_DEFAULT;
 					}
 				}
 				else if(event == BTN_RELEASED)
 				{
-					if((!menu.copySelected) && (menu.stepSel != NULL))
+					if(menu.state == MENU_COPY_STEPS)
 					{
+						menu.state = MENU_PASTE_STEPS;
 						menu.numSelected = 1;
-						menu.copySelected = true;
 					}
 				}
 				break;
@@ -144,7 +149,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.modeCurr = MODE_DEFAULT;
-					MenuReset();
+					Menu_Reset();
 				}
 				break;
 
@@ -231,24 +236,20 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_COPY:
 				if(event == BTN_PUSHED)
 				{
-					if(!menu.copySelected)
+					if(menu.state == MENU_IDLE)
 					{
+						menu.state = MENU_COPY_PAGES;
 						menu.pageSel = &app.seqActive->patternCurr->pages[0];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
 					}
-					else
+					else if(menu.state == MENU_COPY_PAGES)
 					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
+						if(app.seqActive->pageCurr == menu.pageSel)
 						{
-							if(app.seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(app.seqActive->midiChannel);
-							}
-							memcpy(app.seqActive->patternCurr->pages[0].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							app.modeCurr = MODE_DEFAULT;
+							MIDI_SendAllNotesOff(app.seqActive->midiChannel);
 						}
+						memcpy(app.seqActive->patternCurr->pages[0].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						Menu_Reset();
+						app.modeCurr = MODE_DEFAULT;
 					}
 				}
 				break;
@@ -278,24 +279,20 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_COPY:
 				if(event == BTN_PUSHED)
 				{
-					if(!menu.copySelected)
+					if(menu.state == MENU_IDLE)
 					{
+						menu.state = MENU_COPY_PAGES;
 						menu.pageSel = &app.seqActive->patternCurr->pages[1];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
 					}
-					else
+					else if(menu.state == MENU_COPY_PAGES)
 					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
+						if(app.seqActive->pageCurr == menu.pageSel)
 						{
-							if(app.seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(app.seqActive->midiChannel);
-							}
-							memcpy(app.seqActive->patternCurr->pages[1].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							app.modeCurr = MODE_DEFAULT;
+							MIDI_SendAllNotesOff(app.seqActive->midiChannel);
 						}
+						memcpy(app.seqActive->patternCurr->pages[1].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						Menu_Reset();
+						app.modeCurr = MODE_DEFAULT;
 					}
 				}
 				break;
@@ -324,24 +321,20 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_COPY:
 				if(event == BTN_PUSHED)
 				{
-					if(!menu.copySelected)
+					if(menu.state == MENU_IDLE)
 					{
+						menu.state = MENU_COPY_PAGES;
 						menu.pageSel = &app.seqActive->patternCurr->pages[2];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
 					}
-					else
+					else if(menu.state == MENU_COPY_PAGES)
 					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
+						if(app.seqActive->pageCurr == menu.pageSel)
 						{
-							if(app.seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(app.seqActive->midiChannel);
-							}
-							memcpy(app.seqActive->patternCurr->pages[2].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							app.modeCurr = MODE_DEFAULT;
+							MIDI_SendAllNotesOff(app.seqActive->midiChannel);
 						}
+						memcpy(app.seqActive->patternCurr->pages[2].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						Menu_Reset();
+						app.modeCurr = MODE_DEFAULT;
 					}
 				}
 				break;
@@ -370,24 +363,20 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_COPY:
 				if(event == BTN_PUSHED)
 				{
-					if(!menu.copySelected)
+					if(menu.state == MENU_IDLE)
 					{
+						menu.state = MENU_COPY_PAGES;
 						menu.pageSel = &app.seqActive->patternCurr->pages[3];
-						menu.actionCurr = MENU_COPY_PAGES;
-						menu.copySelected = true;
 					}
-					else
+					else if(menu.state == MENU_COPY_PAGES)
 					{
-						if(menu.actionCurr == MENU_COPY_PAGES)
+						if(app.seqActive->pageCurr == menu.pageSel)
 						{
-							if(app.seqActive->pageCurr == menu.pageSel)
-							{
-								MIDI_SendAllNotesOff(app.seqActive->midiChannel);
-							}
-							memcpy(app.seqActive->patternCurr->pages[3].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
-							MenuReset();
-							app.modeCurr = MODE_DEFAULT;
+							MIDI_SendAllNotesOff(app.seqActive->midiChannel);
 						}
+						memcpy(app.seqActive->patternCurr->pages[3].steps, menu.pageSel->steps, NUM_STEPS*sizeof(Step_t));
+						Menu_Reset();
+						app.modeCurr = MODE_DEFAULT;
 					}
 				}
 				break;
@@ -482,6 +471,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				case MODE_DEFAULT:
 				if(event == BTN_PUSHED)
 				{
+					app.modeCurr = MODE_ERASE;
 				}
 				break;
 

@@ -7,15 +7,19 @@
 typedef enum
 {
 	MENU_IDLE,
+	MENU_LISTEN_ON_NOTE,
 	MENU_COPY_STEPS,
-	MENU_COPY_PAGES
-} MenuAction_e;
+	MENU_PASTE_STEPS,
+	MENU_ERASE_STEPS,
+	MENU_COPY_PAGES,
+	MENU_PASTE_PAGES
+} MenuState_e;
 
 typedef struct
 {
 	bool listenOnNote;
 	bool copySelected;
-	MenuAction_e actionCurr;
+	MenuState_e state;
 
 	uint8 numSelected;
 
@@ -23,11 +27,11 @@ typedef struct
 	SeqData_t* seqSel;
 	Step_t* stepSel;
 
-	uint8 iStepSel;
+	int16 iStepSel;
 } Menu_t;
 
 extern volatile Menu_t menu;
 
-void MenuReset();
+void Menu_Reset();
 
 #endif /*MENU_H*/
