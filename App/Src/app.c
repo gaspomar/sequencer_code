@@ -159,7 +159,7 @@ void InitApp()
 	app.seqActive = &seq[0];
 
     app.globStopFlag = false;
-    app.glob_start_flag = false;
+    app.globStartFlag = false;
     app.bpmIncreased = false;
     app.modeChanged = false;
     app.noteOn = false;

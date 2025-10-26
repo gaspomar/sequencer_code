@@ -496,7 +496,7 @@ void MainTask(void *)
 					ResetSequencer(&seq[1]);
 					ResetSequencer(&seq[2]);
 					ResetSequencer(&seq[3]);
-					
+
 					app.globStartFlag = true;
 					DelayFuncUs(150);	// wait for ISR to enter waiting loop
 				}
