@@ -36,7 +36,7 @@ OSData_t os;
  * Functions
  ***********************************************************************************************************************/
 
- void InitOSData()
+ void StartTasks()
  {
 	// semaphores and events
 	os.uartSem = xSemaphoreCreateBinary();

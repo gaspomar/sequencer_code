@@ -23,7 +23,7 @@ void IncrementBPM()
 			// TODO: make sure timer stays in sync in case of tempo change! BUG ALERT!
 			__disable_irq();
 			CalculateSyncTimestamps(app.tempoBpm, app.syncTimestamps_100us);
-			app.bpmIncreased = true;
+			app.tempoChanged = TEMPO_INCREASED;
 			__enable_irq();
 
 			DelayFuncUs(150);
@@ -160,7 +160,7 @@ void InitApp()
 
     app.globStopFlag = false;
     app.globStartFlag = false;
-    app.bpmIncreased = false;
+    app.tempoChanged = TEMPO_UNCHANGED;
     app.modeChanged = false;
     app.noteOn = false;
     app.blinkCnt_ms = 0;
@@ -245,7 +245,7 @@ void InitApp()
 	tm1637_SetNumber(app.tempoBpm);
 	
 	// TODO: TM1637 timeout
-	InitOSData();
+	StartTasks();
 
 	CalculateSyncTimestamps(app.tempoBpm, app.syncTimestamps_100us);
 	

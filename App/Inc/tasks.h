@@ -36,6 +36,6 @@ typedef struct
 
 extern OSData_t os;
 
-void InitOSData();
+void StartTasks();
 
 #endif /*TASK_H*/

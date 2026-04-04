@@ -9,8 +9,8 @@
 
 typedef struct 
 {
-    uint8 size;
-    uint8 buf[UART_ELEMENT_SIZE];
+	uint8 size;
+	uint8 buf[UART_ELEMENT_SIZE];
 } UART_Buf_Element_t;
 
 

@@ -83,6 +83,31 @@ volatile uint16 syncCnt = 0;            // midi sync event counter
 
 const uint8_t midiClockMsg = 0xF8;
 
+/**
+  * @brief  Calculate the new value for the 100us counter based on the tempo change event
+  * @param cntr_100us     current value of the counter
+  * @param syncCntr       the counter which holds the index of the sync event already reached in the timestamp table
+  * @param timestamps     pointer to the timestamps table (which should be already updated by the main task by now)
+  * @param lastTimestamp  where the last timestamp was according to the table before the tempo change
+  * @param nextTimestamp  where the next timestamp was according to the table before the tempo change
+  * @param tempoChanged   the type (direction) of the tempo change event
+  * @retval               new value of the counter
+  */
+static uint16 CalcNewCounterValue(uint16 cntr_100us, uint16 syncCntr, uint32 *timestamps, uint32 lastTimestamp, uint32 nextTimestamp, TempoChange_e tempoChanged)
+{
+  uint16 elapsedSinceLastClock_old = cntr_100us - lastTimestamp;
+  uint16 leftUntilNextClock_old = nextTimestamp - cntr_100us;
+  uint16 deltaT_new = timestamps[1];
+
+  if(tempoChanged == TEMPO_INCREASED)
+  {
+    return timestamps[syncCnt] + MIN((deltaT_new - leftUntilNextClock_old), deltaT_new);
+  }
+  else if(tempoChanged == TEMPO_DECREASED)
+  {
+    return timestamps[syncCnt] + elapsedSinceLastClock_old;
+  }
+}
 
 /* USER CODE END 0 */
 
@@ -245,15 +270,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     // 100us
     if(htim->Instance == TIM3)
     {
-      
-      if(app.globStopFlag)
-      {
-        counter_100us = 0;
-        syncCnt = 0;
-        lastTimestamp = 0;
-        nextTimestamp = app.syncTimestamps_100us[1];
-      }
-      if(app.globStartFlag)
+      if(app.globStopFlag || app.globStartFlag)
       {
         counter_100us = 0;
         syncCnt = 0;
@@ -262,10 +279,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       }
       else
       {
-        if(app.bpmIncreased)
+        if(app.tempoChanged != TEMPO_UNCHANGED)
         {
-          counter_100us = app.syncTimestamps_100us[syncCnt] + MIN(((app.syncTimestamps_100us[syncCnt+1] - app.syncTimestamps_100us[syncCnt]) - (nextTimestamp - counter_100us)), app.syncTimestamps_100us[1]);
-          app.bpmIncreased = false;
+          counter_100us = CalcNewCounterValue(counter_100us, syncCnt, app.syncTimestamps_100us, lastTimestamp, nextTimestamp, app.tempoChanged);
+          app.tempoChanged = TEMPO_UNCHANGED;
         }
         if(counter_100us == app.syncTimestamps_100us[syncCnt+1])  // counter reached sync event
         {
@@ -285,7 +302,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
           UART_Buf_AddToQueue(&midiClockMsg, 1);
           if(app.globPlaying)
           {
-            // TODO: for some reason the timing is 3% inaccurate, check with scope!
             if(syncCnt == 23) // 1/4 note reached, counter resets
             {
               syncCnt = 0;

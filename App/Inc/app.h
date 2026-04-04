@@ -50,6 +50,14 @@ typedef enum
 } Mode_e;
 
 
+typedef enum
+{
+	TEMPO_INCREASED,
+	TEMPO_DECREASED,
+	TEMPO_UNCHANGED
+} TempoChange_e;
+
+
 typedef struct
 {
     uint16 tempo;
@@ -126,7 +134,7 @@ typedef struct
     
     bool globStopFlag;
     bool globStartFlag;					// all sequencers are about to be started
-    bool bpmIncreased;
+    TempoChange_e tempoChanged;
     bool modeChanged;
     
     AnalogBuffer_t potBuffer;
