@@ -9,7 +9,7 @@
 #include "menu.h"
 #include "tm1637.h"
 
-volatile AppState_t app;
+volatile AppData_t app;
 volatile SeqData_t seq[4];
 
 

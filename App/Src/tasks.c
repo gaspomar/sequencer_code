@@ -466,6 +466,7 @@ void MainTask(void *)
 
 	static uint16 syncCntLocal = 0;
 	static int32 syncCntPrev = -1;
+	static bool syncEvent = false;
 
 	static bool allSeqOff;
 	static bool allNotesOff;
@@ -478,6 +479,8 @@ void MainTask(void *)
 			__disable_irq();
 			syncCntLocal = syncCnt;
 			__enable_irq();
+			// sync counter incremented --> sync event
+			syncEvent = (syncCntLocal != syncCntPrev);
 
 			xTaskNotifyWait(0x0000, 0xFFFF, &notVal, 0);
 
@@ -566,25 +569,67 @@ void MainTask(void *)
 					default:{}
 				}
 			}
+
+			// ----------------------  SEQ ON/OFF ---------------------------
+			if(!app.globPlaying)
+			{
+				// global start event
+				if(app.globStartFlag)
+				{
+					app.globPlaying = true;
+
+					for(int i=0; i<NUM_SEQUENCERS; i++)
+					{
+						seq[i].stepTimeCnt_ms = 0;
+					}
+				}
+				// individual sequencer start/stop events
+				for(int i=0; i<NUM_SEQUENCERS; i++)
+				{
+					if(!seq[i].on && seq[i].onFlag)
+					{
+						seq[i].on = true;
+						seq[i].onFlag = false;
+					}
+					if(seq[i].on && seq[i].offFlag)
+					{
+						seq[i].on = false;
+						seq[i].offFlag = false;
+					}
+				}
+			}
+			else if(app.globPlaying)
+			{
+				// global stop event
+				if(app.globStopFlag && allNotesOff)
+				{
+					app.globPlaying = false;
+					app.globStopFlag = false;
+				}
+				// individual sequencer start/stop event
+				for(int i=0; i<NUM_SEQUENCERS; i++)
+				{
+					if((seq[i].onFlag) && syncEvent && (syncCntLocal == 0))
+					{
+						seq[i].on = true;
+						seq[i].onFlag = false;
+					}
+					if(seq[i].offFlag && !seq[i].noteOn)
+					{
+						seq[i].on = false;
+						seq[i].offFlag = false;
+						ResetSequencer(&seq[i]);
+					}
+				}
+			}
 			
 			// ----------------------- STEPPING -----------------------------
-			if(app.globPlaying || app.globStartFlag)
+			if(app.globPlaying)
 			{
-				if(((syncCntLocal != syncCntPrev) || app.globStartFlag) && !app.globStopFlag)	// sync counter updated or start initiated
+				if(syncEvent || app.globStartFlag)	// sync counter updated or start initiated
 				{
 					for(int i=0; i<NUM_SEQUENCERS; i++)
 					{
-						if(app.globStartFlag)
-						{
-							seq[i].stepTimeCnt_ms = 0;
-						}
-
-						if((seq[i].onFlag) && (syncCntLocal == 0))
-						{
-							seq[i].on = true;
-							seq[i].onFlag = false;
-						}
-
 						if(seq[i].on && (syncCntLocal % seq[i].syncEventsPerStep == 0))	// new step reached
 						{
 							Step(&seq[i]);
@@ -600,6 +645,11 @@ void MainTask(void *)
 							}
 						}
 					}
+					if(app.globStartFlag)
+					{
+						// step 0 done, start counter (in main.c) by clearing the flag
+						app.globStartFlag = false;
+					}
 				}
 				
 				for(int i=0; i<NUM_SEQUENCERS; i++)
@@ -611,44 +661,10 @@ void MainTask(void *)
 							SendNoteOFFs(&seq[i]);
 							seq[i].noteOn = false;
 						}
-						if(seq[i].offFlag)
-						{
-							seq[i].on = false;
-							seq[i].offFlag = false;
-							ResetSequencer(&seq[i]);
-						}
 					}
 				}
 				
 				allNotesOff = !seq[0].noteOn && !seq[1].noteOn && !seq[2].noteOn && !seq[3].noteOn;
-				
-				if(app.globStartFlag)
-				{
-					app.globStartFlag = false;
-					app.globPlaying = true;
-				}
-				
-				if(app.globStopFlag && allNotesOff)
-				{
-					app.globPlaying = false;
-					app.globStopFlag = false;
-				}
-			}
-			else if(!app.globPlaying)
-			{
-				for(int i=0; i<NUM_SEQUENCERS; i++)
-				{
-					if(!seq[i].on && seq[i].onFlag)
-					{
-						seq[i].on = true;
-						seq[i].onFlag = false;
-					}
-					if(seq[i].on && seq[i].offFlag)
-					{
-						seq[i].on = false;
-						seq[i].offFlag = false;
-					}
-				}
 			}
 
 			xSemaphoreGive(os.rsrcMutex);

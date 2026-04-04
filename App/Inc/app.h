@@ -109,7 +109,7 @@ typedef struct
 	Pattern_t patterns[NUM_PATTERNS];
 	Pattern_t* patternCurr;				// pointer to selected pattern
 	Page_t* pageCurr;					// pointer to page where the currently playing step is located
-	uint8 iStepCurr;					// current step index inside currently played page
+	int16 iStepCurr;					// current step index inside currently played page
 	
     Page_t* pageSel;					// pointer to the selected page
 	bool noteOn;						// flag to indicate that some notes are on [LEGACY]
@@ -148,7 +148,7 @@ typedef struct
     uint32 syncTimestamps_100us[25];	// stores the timestamps where a midi sync event should happen up to the 1/4 of the beat
     
     uint8 iStepSel;
-} AppState_t;
+} AppData_t;
 
 
 void InitApp();
@@ -160,7 +160,7 @@ void SendNoteOFFs(SeqData_t* seq);
 void ResetSequencer(SeqData_t* seq);
 
 
-extern volatile AppState_t app;
+extern volatile AppData_t app;
 extern volatile SeqData_t seq[4];
 
 #endif /*APP_H*/

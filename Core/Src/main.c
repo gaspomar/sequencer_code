@@ -270,6 +270,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     // 100us
     if(htim->Instance == TIM3)
     {
+      // transitional period, wait for main task to clear flag
       if(app.globStopFlag || app.globStartFlag)
       {
         counter_100us = 0;
