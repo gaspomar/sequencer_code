@@ -42,6 +42,7 @@
     "C_Cpp.default.compilerPath": "F:/Program Files/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc.exe",
     "C_Cpp.intelliSenseEngine": "default",
     "clangd.path": "clangd",
+    "clangd.inlayHints.parameterNames": "false",
     "clangd.arguments": [
         "--log=verbose", 
         "--pretty", 
@@ -50,5 +51,18 @@
         "--header-insertion=iwyu",
         "--compile-commands-dir=${workspaceFolder}",
         "--enable-config"
+    ],
+    "cmake.cmakePath": "cube-cmake",
+    "cmake.configureArgs": [
+        "-DCMAKE_COMMAND=cube-cmake"
+    ],
+    "cmake.preferredGenerators": [
+        "Ninja"
+    ],
+    "stm32cube-ide-clangd.path": "cube",
+    "stm32cube-ide-clangd.arguments": [
+        "starm-clangd",
+        "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-gcc*",
+        "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-g++*"
     ]
 }
