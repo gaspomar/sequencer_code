@@ -109,7 +109,7 @@ typedef struct
 	Pattern_t patterns[NUM_PATTERNS];
 	Pattern_t* patternCurr;				// pointer to selected pattern
 	Page_t* pageCurr;					// pointer to page where the currently playing step is located
-	int16 iStepCurr;					// current step index inside currently played page
+	uint8 iStepCurr;					// current step index inside currently played page
 	
     Page_t* pageSel;					// pointer to the selected page
 	bool noteOn;						// flag to indicate that some notes are on [LEGACY]
@@ -154,7 +154,7 @@ typedef struct
 void InitApp();
 void IncrementBPM();
 void DecrementBPM();
-void Step(SeqData_t* seq);
+void Step(SeqData_t* seq, bool globStartFlag);
 void SendNoteONs(SeqData_t* seq);
 void SendNoteOFFs(SeqData_t* seq);
 void ResetSequencer(SeqData_t* seq);

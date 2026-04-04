@@ -67,10 +67,26 @@ void DecrementBPM()
 	}
 }
 
-
-void Step(SeqData_t* seq)
+/************************************
+ * @brief Handles the stepping logic
+ * 
+ * @param seq Sequencer to handle
+ * @param globStartFlag Whether playback is about to be started
+ */
+void Step(SeqData_t* seq, bool globStartFlag)
 {
 	seq->stepTimeCnt_ms = 0;
+
+	// At start no stepping needed as the first step to be processed is 0
+	if(seq->onFlag)
+	{
+		seq->onFlag = false;
+		return;
+	}
+	if(globStartFlag)
+	{
+		return;
+	}
 
 	switch(seq->stepRes)
 	{
@@ -146,7 +162,7 @@ void ResetSequencer(SeqData_t* seq)
 			break;
 		}
 	}
-	seq->iStepCurr = -1;
+	seq->iStepCurr = 0;
 }
 
 
@@ -202,7 +218,7 @@ void InitApp()
 		seq[i].patternCurr = &seq[i].patterns[0];
 		seq[i].pageCurr = &seq[i].patternCurr->pages[0];
 		seq[i].pageSel = &seq[i].patternCurr->pages[0];
-		seq[i].iStepCurr = -1;
+		seq[i].iStepCurr = 0;
 		seq[i].noteOn = false;
 		seq[i].midiChannel = i;
 		seq[i].rootNote = NOTE_C3;

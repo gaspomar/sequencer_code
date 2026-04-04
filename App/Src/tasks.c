@@ -612,7 +612,7 @@ void MainTask(void *)
 					if((seq[i].onFlag) && syncEvent && (syncCntLocal == 0))
 					{
 						seq[i].on = true;
-						seq[i].onFlag = false;
+						// onFlag will be cleared by the Step() function
 					}
 					if(seq[i].offFlag && !seq[i].noteOn)
 					{
@@ -626,13 +626,13 @@ void MainTask(void *)
 			// ----------------------- STEPPING -----------------------------
 			if(app.globPlaying)
 			{
-				if(syncEvent || app.globStartFlag)	// sync counter updated or start initiated
+				for(int i=0; i<NUM_SEQUENCERS; i++)
 				{
-					for(int i=0; i<NUM_SEQUENCERS; i++)
+					if(syncEvent || app.globStartFlag)	// sync counter updated or start initiated
 					{
 						if(seq[i].on && (syncCntLocal % seq[i].syncEventsPerStep == 0))	// new step reached
 						{
-							Step(&seq[i]);
+							Step(&seq[i], app.globStartFlag);
 							
 							if (true == seq[i].pageCurr->steps[seq[i].iStepCurr].on)
 							{
@@ -645,11 +645,11 @@ void MainTask(void *)
 							}
 						}
 					}
-					if(app.globStartFlag)
-					{
-						// step 0 done, start counter (in main.c) by clearing the flag
-						app.globStartFlag = false;
-					}
+				}
+				if(app.globStartFlag)
+				{
+					// step 0 done, start counter (in main.c) by clearing the flag
+					app.globStartFlag = false;
 				}
 				
 				for(int i=0; i<NUM_SEQUENCERS; i++)
@@ -663,7 +663,6 @@ void MainTask(void *)
 						}
 					}
 				}
-				
 				allNotesOff = !seq[0].noteOn && !seq[1].noteOn && !seq[2].noteOn && !seq[3].noteOn;
 			}
 
