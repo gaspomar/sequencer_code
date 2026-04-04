@@ -6,8 +6,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// MIDI_CLOCKS_PER_BEAT -- 24
 
-#define SATURATE(a, max) ((a)>(max) ? (max) : (a))
+#define SATURATE_MIN(a, min) ((a)<(min) ? (min) : (a))
+#define SATURATE_MAX(a, max) ((a)>(max) ? (max) : (a))
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
@@ -37,6 +39,8 @@ static inline uint16 CalculateStepTime(uint16 BPM, uint16 syncEventsPerStep) { r
 static inline uint16 CalculateSyncEventsPerStep(uint16 resolution) { return (uint16)((24*4)/resolution); }
 
 static inline uint16 CalculateGateTime(uint16 stepTime, uint8 gatePercent) { return (stepTime * gatePercent) / 100; }
+
+static inline uint16 CalculateSwingTime(uint16 stepTime, uint8 swingPercent) { return (uint16)((stepTime * (100 + swingPercent) / 100)); }
 
 
 #endif /* MISC_H */

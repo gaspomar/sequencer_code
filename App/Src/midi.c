@@ -8,7 +8,7 @@
 
 #include "uart_buffer.h"
 
-#define SATURATE(a, max) ((a)>(max) ? (max) : (a))
+#define SATURATE_MAX(a, max) ((a)>(max) ? (max) : (a))
 
 uint8 midiNoteOnData[3] = {0};
 uint8 midiNoteOffData[3] = {0};

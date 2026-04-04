@@ -115,6 +115,10 @@ typedef struct
 	bool noteOn;						// flag to indicate that some notes are on [LEGACY]
 	int16 notesOn[N_POLYPHONY];			// which notes are currently on
 
+	uint8 swingPercent;					// currently stored swing value
+	bool swingInSync;					// swing knob is at the same position as stored value
+	int32 swingedStepTime_ms;					// how many miliseconds the second note is placed from the first
+	
 	uint8 gatePercent;					// currently stored gate value
 	bool gateInSync;					// gate knob is at the same position as stored value
 	uint16 syncEventsPerStep;			// how many midi ticks it takes to reach next step
@@ -138,7 +142,8 @@ typedef struct
     bool modeChanged;
     
     AnalogBuffer_t potBuffer;
-    uint8 gatePercent;
+    uint8 gatePercent;					// current reading of gate knob
+	uint8 swingPercent;					// current reading of swing knob
     
     bool noteOn;
     

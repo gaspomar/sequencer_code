@@ -110,7 +110,7 @@ void LedUpdateTask(void *)
 			}
 			
 			
-			if((blinkSyncCntLoc != blinkSyncCntPrev) && (blinkSyncCntLoc % 24 == 0))
+			if((blinkSyncCntLoc != blinkSyncCntPrev) && (blinkSyncCntLoc % MIDI_CLOCKS_PER_BEAT == 0))
 			{
 				__disable_irq();
 				app.blinkCnt_ms = 0;
@@ -274,6 +274,17 @@ void LedUpdateTask(void *)
 					potLEDs[1] = true;
 				}
 			}
+			if(false == app.seqActive->swingInSync)
+			{
+				if(app.seqActive->swingPercent > app.swingPercent)
+				{
+					potLEDsBlink[2] = true;
+				}
+				else
+				{
+					potLEDs[2] = true;
+				}
+			}
 
 
 			// ------- gate reached -----------
@@ -361,9 +372,10 @@ void PotUpdateTask(void *)
 {
 	while(1)
 	{
-		app.gatePercent = MAX((uint8)SATURATE((((fabs((float)SATURATE(app.potBuffer.gate, 4040) - 4040.0))/4040.0)*100.0), 99.0), 1);
+		// ----------- GATE -------------
+		app.gatePercent = MAX((uint8)SATURATE_MAX((((fabs((float)SATURATE_MAX(app.potBuffer.gate, 4040) - 4040.0))/4040.0)*100.0), 99.0), 10);
 
-		if((app.seqActive->gatePercent >= app.gatePercent-5) && (app.seqActive->gatePercent <= app.gatePercent+5))
+		if((app.seqActive->gatePercent >= SATURATE_MIN(app.gatePercent-5, 1)) && (app.seqActive->gatePercent <= SATURATE_MAX(app.gatePercent+5, 99)))
 		{
 			app.seqActive->gateInSync = true;
 		}
@@ -372,6 +384,20 @@ void PotUpdateTask(void *)
 		{
 			app.seqActive->gatePercent = app.gatePercent;
 			app.seqActive->gateTime_ms = CalculateGateTime(app.seqActive->stepTime_ms, app.seqActive->gatePercent);
+		}
+
+		// ----------- SWING -------------
+		app.swingPercent = MAX((uint8)SATURATE_MAX((((fabs((float)SATURATE_MAX(app.potBuffer.swing, 4040) - 4040.0))/4040.0)*100.0), 99.0), 1);
+
+		if((app.seqActive->swingPercent >= SATURATE_MIN(app.swingPercent-5, 0)) && (app.seqActive->swingPercent <= SATURATE_MAX(app.swingPercent+5, 99)))
+		{
+			app.seqActive->swingInSync = true;
+		}
+		
+		if(app.seqActive->swingInSync)
+		{
+			app.seqActive->swingPercent = app.swingPercent;
+			app.seqActive->swingedStepTime_ms = CalculateSwingTime(app.seqActive->stepTime_ms, app.seqActive->swingPercent);
 		}
 
 		vTaskDelay(pdMS_TO_TICKS(10));
@@ -628,10 +654,27 @@ void MainTask(void *)
 			{
 				for(int i=0; i<NUM_SEQUENCERS; i++)
 				{
-					if(syncEvent || app.globStartFlag)	// sync counter updated or start initiated
+					bool stepNeeded = false;
+					
+					if((seq[i].iStepCurr + 1) % 2 == 0)
 					{
-						if(seq[i].on && (syncCntLocal % seq[i].syncEventsPerStep == 0))	// new step reached
+						stepNeeded = syncEvent && (syncCntLocal == ((seq[i].syncEventsPerStep * (seq[i].iStepCurr + 1)) % MIDI_CLOCKS_PER_BEAT));
+					}
+					else
+					{
+						stepNeeded = seq[i].stepTimeCnt_ms >= seq[i].swingedStepTime_ms;
+					}
+
+					if(stepNeeded || app.globStartFlag)
+					{
+						if(seq[i].on)	// new step reached
 						{
+							// could not reach gate time, but note should be released before next step
+							if(seq[i].noteOn)
+							{
+								SendNoteOFFs(&seq[i]);
+								seq[i].noteOn = false;
+							}
 							Step(&seq[i], app.globStartFlag);
 							
 							if (true == seq[i].pageCurr->steps[seq[i].iStepCurr].on)

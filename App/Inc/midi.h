@@ -3,6 +3,8 @@
 
 #include "misc.h"
 
+#define MIDI_CLOCKS_PER_BEAT 24
+
 extern uint8 midiNoteOnData[3];
 extern uint8 midiNoteOffData[3];
 

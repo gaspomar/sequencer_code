@@ -139,6 +139,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[0];
 				}
 				break;
@@ -164,6 +165,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[1];
 				}
 				break;
@@ -179,6 +181,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[2];
 				}
 				break;
@@ -201,6 +204,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[3];
 				}
 				break;
@@ -596,6 +600,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[0];
 				}
 				break;
@@ -619,6 +624,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[1];
 				}
 				break;
@@ -642,6 +648,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[2];
 				}
 				break;
@@ -665,6 +672,7 @@ void ButtonActivate(uint32 iBtn, bool shift, BtnEvent_e event)
 				if(event == BTN_PUSHED)
 				{
 					app.seqActive->gateInSync = false;
+					app.seqActive->swingInSync = false;
 					app.seqActive = &seq[3];
 				}
 				break;

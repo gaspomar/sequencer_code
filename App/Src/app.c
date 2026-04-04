@@ -200,7 +200,7 @@ void InitApp()
 				
 				for(int k=0; k<NUM_STEPS; k++)
 				{
-					seq[i].patterns[l].pages[j].steps[k].on = false;
+					seq[i].patterns[l].pages[j].steps[k].on = true;
 					seq[i].patterns[l].pages[j].steps[k].n_poly = 1;
 					seq[i].patterns[l].pages[j].steps[k].pitch[0] = 60;	// middle C
 					seq[i].patterns[l].pages[j].steps[k].octOffs = 0;
@@ -223,9 +223,12 @@ void InitApp()
 		seq[i].midiChannel = i;
 		seq[i].rootNote = NOTE_C3;
 		seq[i].gateInSync = false;
+		seq[i].swingInSync = false;
 		seq[i].onFlag = false;
 		seq[i].offFlag = false;
 		seq[i].gatePercent = 50;
+		seq[i].swingPercent = 0;
+		seq[i].swingedStepTime_ms = CalculateSwingTime(seq[i].stepTime_ms, seq[i].swingPercent);
 		seq[i].gateTime_ms = CalculateGateTime(seq[i].stepTime_ms, seq[i].gatePercent);                               
 		
 		if((i==0) || (i==0))	
